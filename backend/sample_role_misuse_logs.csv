@@ -1,0 +1,9 @@
+EmployeeID,Role,AccessedResource,Timestamp
+EMP005,Intern,ConfidentialDocs,2026-03-18T09:12:00
+EMP014,Developer,TechnicalDocumentation,2026-03-18T10:45:00
+EMP014,Developer,FinancialReports,2026-03-18T11:00:00
+EMP003,HR Manager,EmployeeRecords,2026-03-18T11:10:00
+EMP008,Intern,Secret_Product_Plan.pdf,2026-03-18T23:56:00
+EMP002,Finance Analyst,FinancialReports,2026-03-18T13:16:00
+EMP010,Developer,TrainingDocuments,2026-03-18T02:18:00
+

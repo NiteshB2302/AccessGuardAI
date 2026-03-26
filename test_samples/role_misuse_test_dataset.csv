@@ -1,0 +1,37 @@
+EmployeeID,Role,AccessedResource,Timestamp
+EMP001,Finance Analyst,FinancialReports,2026-03-20T09:02:00
+EMP001,Finance Analyst,BudgetForecastSheet,2026-03-20T09:18:00
+EMP001,Finance Analyst,InvoiceApprovalRecords,2026-03-20T11:07:00
+EMP001,Finance Analyst,PayrollData,2026-03-20T11:41:00
+EMP002,HR Manager,EmployeeRecords,2026-03-20T10:03:00
+EMP002,HR Manager,RecruitmentPipeline,2026-03-20T10:42:00
+EMP002,HR Manager,SalaryReviewSheet,2026-03-20T12:15:00
+EMP003,Developer,TechnicalDocumentation,2026-03-20T09:25:00
+EMP003,Developer,EngineeringArchitecture,2026-03-20T10:30:00
+EMP003,Developer,CodeRepositoryGuide,2026-03-20T14:11:00
+EMP004,Intern,TrainingDocuments,2026-03-20T09:45:00
+EMP004,Intern,OnboardingGuide,2026-03-20T10:20:00
+EMP004,Intern,TrainingAssessmentSheet,2026-03-20T15:18:00
+EMP005,Finance Analyst,TechnicalDocumentation,2026-03-20T22:47:00
+EMP005,Finance Analyst,SecretProductRoadmap,2026-03-20T23:16:00
+EMP006,Intern,ConfidentialDocs,2026-03-20T23:58:00
+EMP006,Intern,PayrollData,2026-03-20T00:21:00
+EMP007,Developer,FinancialReports,2026-03-20T02:42:00
+EMP007,Developer,SalaryRecords,2026-03-20T03:10:00
+EMP008,HR Manager,FinanceBudgetSheet,2026-03-20T21:56:00
+EMP008,HR Manager,DatabaseCredentialsArchive,2026-03-20T22:14:00
+EMP009,Finance Analyst,FinancialReports,2026-03-21T09:04:00
+EMP009,Finance Analyst,BudgetForecastSheet,2026-03-21T10:35:00
+EMP010,Developer,TechnicalDocumentation,2026-03-21T10:10:00
+EMP010,Developer,EngineeringArchitecture,2026-03-21T10:52:00
+EMP011,Intern,TrainingDocuments,2026-03-21T11:33:00
+EMP011,Intern,OnboardingGuide,2026-03-21T12:09:00
+EMP012,HR Manager,EmployeeRecords,2026-03-21T09:27:00
+EMP012,HR Manager,SalaryReviewSheet,2026-03-21T13:41:00
+EMP013,Finance Analyst,EmployeeRecords,2026-03-21T20:48:00
+EMP013,Finance Analyst,DatabaseCredentialsArchive,2026-03-21T23:22:00
+EMP014,Developer,TrainingDocuments,2026-03-21T01:18:00
+EMP014,Developer,PayrollData,2026-03-21T01:51:00
+EMP015,Intern,TechnicalDocumentation,2026-03-21T22:31:00
+EMP015,Intern,FinancialReports,2026-03-21T22:55:00
+

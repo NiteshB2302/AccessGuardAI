@@ -1,0 +1,8 @@
+Hi team,
+
+Reminder that tomorrow's sprint planning meeting starts at 10:30 AM in Meeting Room B.
+Please update your task status in Jira before the meeting.
+
+Thanks,
+Engineering Manager
+

@@ -1,0 +1,7 @@
+Internal memo draft:
+
+Please keep this confidential.
+The script should collect credentials and password data from all systems.
+Disable security audit checks and exfiltrate the database backup tonight.
+Do not share this with compliance or security teams.
+

@@ -1,0 +1,7 @@
+EmployeeID,Role,AccessedResource,Timestamp
+EMP001,Finance Analyst,FinancialReports,2026-03-20T09:15:00
+EMP001,Finance Analyst,PayrollData,2026-03-20T09:20:00
+EMP010,Intern,ConfidentialDocs,2026-03-20T23:45:00
+EMP014,Developer,TechnicalDocumentation,2026-03-20T10:10:00
+EMP014,Developer,FinanceBudgetSheet,2026-03-20T10:17:00
+
