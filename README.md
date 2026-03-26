@@ -210,3 +210,19 @@ This keeps your local backup and local MongoDB untouched unless you explicitly c
 - Your local MongoDB backup remains unchanged if Vercel uses its own Atlas URI.
 - Keep `backend/.env` for local only, and do not copy your local URI into Vercel env settings.
 - Local dev still uses `backend/.env` and can continue using Python ML (`USE_PYTHON_MODELS=true`).
+
+## PWA & Mobile Support
+
+- Frontend now ships as a Progressive Web App using `vite-plugin-pwa`.
+- Service worker and manifest are generated during `npm run build`.
+- Install support is enabled for Android, iOS (Add to Home Screen), and desktop browsers.
+- Mobile layout now includes a sidebar drawer menu and responsive table handling for dashboards.
+
+### PWA Verify Checklist
+
+1. Open deployed frontend in Chrome/Edge.
+2. Check install icon (`Install App`) appears in address bar.
+3. Install app and open in standalone mode.
+4. In DevTools -> Application, verify:
+   - Manifest is valid
+   - Service Worker is active

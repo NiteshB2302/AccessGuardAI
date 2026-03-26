@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Outlet, useLocation } from "react-router-dom";
+import { Menu, X } from "lucide-react";
 import AdminSidebar from "../components/AdminSidebar";
 import TopNavbar from "../components/TopNavbar";
 import { useAuth } from "../services/AuthContext";
@@ -29,6 +30,7 @@ export default function AdminLayout() {
   const location = useLocation();
   const [alerts, setAlerts] = useState([]);
   const [popupAlert, setPopupAlert] = useState(null);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const latestAlertId = useRef(null);
 
   useEffect(() => {
@@ -52,6 +54,19 @@ export default function AdminLayout() {
       setTimeout(() => setPopupAlert(null), 5000);
     }
   }, [alerts]);
+
+  useEffect(() => {
+    setIsMobileNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isMobileNavOpen) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [isMobileNavOpen]);
 
   const title = useMemo(() => PAGE_TITLES[location.pathname] || "Access Guard AI Admin", [location.pathname]);
   const subtitle = useMemo(
@@ -81,6 +96,19 @@ export default function AdminLayout() {
       </div>
 
       <main className="relative z-10 flex-1 p-4 md:p-7">
+        <div className="mb-3 flex items-center justify-between md:hidden">
+          <button
+            onClick={() => setIsMobileNavOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-cyber-accent/30 bg-white/85 px-3 py-2 text-sm text-cyber-accent"
+          >
+            <Menu className="h-4 w-4" />
+            Menu
+          </button>
+          <span className="rounded-full border border-cyber-accent/20 bg-white/75 px-3 py-1 text-[11px] uppercase tracking-wide text-slate-500">
+            Admin Console
+          </span>
+        </div>
+
         <TopNavbar user={user} onLogout={logout} notifications={alerts.slice(0, 12)} />
         <div className="mb-5 rounded-2xl border border-cyber-accent/20 bg-gradient-to-r from-white/85 to-cyber-base/80 p-4 shadow-panel">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -123,6 +151,36 @@ export default function AdminLayout() {
               Security Alert
             </p>
             <p className="mt-1 text-sm text-slate-800">{popupAlert.message}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isMobileNavOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[850] bg-slate-900/45 backdrop-blur-sm md:hidden"
+            onClick={() => setIsMobileNavOpen(false)}
+          >
+            <motion.aside
+              initial={{ x: -28, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -18, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="relative h-full w-[86vw] max-w-[320px] border-r border-cyber-accent/25 bg-white/95 shadow-cyber"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                onClick={() => setIsMobileNavOpen(false)}
+                className="absolute right-3 top-3 z-10 rounded-lg border border-cyber-accent/30 bg-white/90 p-1.5 text-cyber-accent"
+                aria-label="Close menu"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <AdminSidebar mobile onNavigate={() => setIsMobileNavOpen(false)} />
+            </motion.aside>
           </motion.div>
         )}
       </AnimatePresence>

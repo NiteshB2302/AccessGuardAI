@@ -202,7 +202,7 @@ export default function AdminMonitoringPage() {
         <div className="glass-panel cyber-scroll rounded-2xl border border-cyber-accent/20 p-4">
           <h3 className="mb-3 font-display text-lg font-semibold text-slate-900">Insider Threat & Risk Table</h3>
           <div className="max-h-[320px] overflow-auto">
-            <table className="w-full text-sm">
+            <table className="cyber-table w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="pb-2">EmployeeID</th>
@@ -259,7 +259,7 @@ export default function AdminMonitoringPage() {
         <div className="glass-panel cyber-scroll rounded-2xl border border-cyber-accent/20 p-4">
           <h3 className="mb-3 font-display text-lg font-semibold text-slate-900">Data Exfiltration Incident Queue</h3>
           <div className="max-h-[320px] overflow-auto">
-            <table className="w-full text-sm">
+            <table className="cyber-table w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="pb-2">Employee</th>
@@ -352,7 +352,7 @@ export default function AdminMonitoringPage() {
             </div>
           </div>
           <div className="max-h-[300px] overflow-auto">
-            <table className="w-full text-sm">
+            <table className="cyber-table w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="pb-2">Employee</th>
@@ -431,7 +431,7 @@ export default function AdminMonitoringPage() {
             </div>
           </div>
           <div className="max-h-[260px] overflow-auto">
-            <table className="w-full text-sm">
+            <table className="cyber-table w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="pb-2">Employee</th>

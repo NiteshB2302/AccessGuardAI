@@ -257,7 +257,7 @@ export default function AdminEmployeesPage() {
           </div>
 
           <div className="max-h-[440px] overflow-auto">
-            <table className="w-full text-sm">
+            <table className="cyber-table w-full text-sm">
               <thead className="sticky top-0 bg-cyber-base/90 text-left text-xs uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="pb-2">EmployeeID</th>

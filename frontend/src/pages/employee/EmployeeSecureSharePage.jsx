@@ -336,7 +336,7 @@ export default function EmployeeSecureSharePage() {
       <section className="glass-panel rounded-2xl border border-cyber-accent/20 p-4">
         <h3 className="mb-3 font-display text-lg font-semibold text-slate-900">Secure Share Incident History</h3>
         <div className="max-h-[340px] overflow-auto">
-          <table className="w-full text-sm">
+          <table className="cyber-table w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="pb-2">Time</th>

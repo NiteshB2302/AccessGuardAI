@@ -156,7 +156,7 @@ export default function AdminRoleMisusePage() {
               )}
 
               <div className="max-h-[420px] overflow-auto rounded-xl border border-cyber-accent/15">
-                <table className="w-full text-xs">
+                <table className="cyber-table w-full text-xs">
                   <thead className="sticky top-0 bg-cyber-base/95 text-left text-slate-400">
                     <tr>
                       <th className="px-2 py-2">Employee</th>

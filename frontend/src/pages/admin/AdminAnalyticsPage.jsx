@@ -82,7 +82,7 @@ function Card({ title, children }) {
           Live
         </span>
       </div>
-      <div className="h-72 md:h-80">{children}</div>
+      <div className="h-64 sm:h-72 md:h-80">{children}</div>
     </div>
   );
 }
@@ -652,7 +652,7 @@ export default function AdminAnalyticsPage() {
 
           {!drilldown.loading && !drilldown.error && (
             <div className="max-h-[350px] overflow-auto rounded-xl border border-cyber-accent/15">
-              <table className="w-full text-sm">
+              <table className="cyber-table w-full text-sm">
                 <thead className="sticky top-0 bg-cyber-base/95 text-left text-xs uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-3 py-2">Time</th>

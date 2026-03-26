@@ -22,6 +22,11 @@ body {
   position: relative;
 }
 
+html,
+body {
+  width: 100%;
+}
+
 body::before,
 body::after {
   content: "";
@@ -231,6 +236,26 @@ body::after {
   border: 1px solid rgba(37, 99, 235, 0.18);
   background: linear-gradient(155deg, rgba(255, 255, 255, 0.94), rgba(244, 250, 255, 0.9));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88), 0 16px 32px rgba(37, 99, 235, 0.1);
+}
+
+@media (max-width: 1024px) {
+  .cyber-table {
+    min-width: 720px;
+  }
+}
+
+@media (max-width: 768px) {
+  body::before,
+  body::after {
+    opacity: 0.65;
+    filter: blur(52px);
+  }
+
+  .page-veil {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0) 80%, rgba(226, 236, 255, 0.45) 100%),
+      linear-gradient(90deg, rgba(240, 247, 255, 0.62) 0%, rgba(240, 247, 255, 0.12) 12%, rgba(240, 247, 255, 0.12) 88%, rgba(240, 247, 255, 0.62) 100%);
+  }
 }
 
 @keyframes drift {

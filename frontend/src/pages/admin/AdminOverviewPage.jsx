@@ -197,7 +197,7 @@ export default function AdminOverviewPage() {
             </span>
           </div>
           <div className="max-h-[300px] overflow-auto">
-            <table className="w-full text-sm">
+            <table className="cyber-table w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="pb-2">Type</th>

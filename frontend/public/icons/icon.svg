@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Access Guard AI">
+  <defs>
+    <linearGradient id="agGradient" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#14835f" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#agGradient)" />
+  <path d="M256 104l118 67-25 150-93 87-93-87-25-150z" fill="#eef6ff" />
+  <path
+    d="M198 262l37 37 79-84"
+    fill="none"
+    stroke="#14835f"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="26"
+  />
+</svg>

@@ -19,9 +19,13 @@ function navClass({ isActive }) {
   ].join(" ");
 }
 
-export default function EmployeeSidebar() {
+export default function EmployeeSidebar({ mobile = false, onNavigate }) {
+  const shellClass = mobile
+    ? "glass-panel cyber-scroll h-full w-full overflow-y-auto rounded-none p-5"
+    : "glass-panel cyber-scroll sticky top-0 h-screen w-full overflow-y-auto rounded-r-3xl p-6";
+
   return (
-    <aside className="glass-panel cyber-scroll sticky top-0 h-screen w-full overflow-y-auto rounded-r-3xl p-6">
+    <aside className={shellClass}>
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -52,7 +56,7 @@ export default function EmployeeSidebar() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.03 }}
             >
-              <NavLink to={item.to} className={navClass}>
+              <NavLink to={item.to} className={navClass} onClick={onNavigate}>
                 <span className="rounded-lg border border-cyber-safe/25 bg-white/75 p-1.5">
                   <Icon className="h-3.5 w-3.5 text-cyber-safe transition group-hover:scale-110" />
                 </span>

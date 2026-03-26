@@ -106,7 +106,7 @@ export default function TopNavbar({ user, onLogout, notifications = [] }) {
       const rect = bellRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      const width = Math.min(360, Math.max(280, window.innerWidth - 16));
+      const width = Math.max(220, Math.min(360, window.innerWidth - 16));
       const top = rect.bottom + 8;
       const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
 
@@ -154,7 +154,7 @@ export default function TopNavbar({ user, onLogout, notifications = [] }) {
         />
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:gap-3 md:w-auto md:flex-nowrap">
         <div className="relative z-[320]" ref={bellRef}>
           <button
             onClick={() => setIsOpen((prev) => !prev)}
@@ -249,9 +249,9 @@ export default function TopNavbar({ user, onLogout, notifications = [] }) {
             )}
         </div>
 
-        <div className="rounded-xl border border-cyber-accent/25 bg-white/85 px-3 py-2 shadow-[0_8px_20px_rgba(37,99,235,0.08)]">
+        <div className="min-w-[132px] rounded-xl border border-cyber-accent/25 bg-white/85 px-2.5 py-2 shadow-[0_8px_20px_rgba(37,99,235,0.08)] sm:px-3">
           <p className="text-[10px] uppercase tracking-wide text-slate-500">Signed In As</p>
-          <p className="text-sm font-semibold text-slate-900">{user?.name || "User"}</p>
+          <p className="truncate text-sm font-semibold text-slate-900">{user?.name || "User"}</p>
           <p className="text-[11px] text-cyber-accent/90">{user?.role || "User"}</p>
         </div>
 
@@ -260,7 +260,7 @@ export default function TopNavbar({ user, onLogout, notifications = [] }) {
           className="flex items-center gap-2 rounded-xl border border-cyber-threat/40 bg-cyber-threat/10 px-3 py-2 text-sm text-cyber-threat transition hover:bg-cyber-threat/20 hover:shadow-panel"
         >
           <LogOut className="h-4 w-4" />
-          Logout
+          <span className="hidden sm:inline">Logout</span>
         </button>
       </div>
     </motion.div>
