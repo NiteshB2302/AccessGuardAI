@@ -10,6 +10,7 @@ const { canUserAccessDocument } = require("../services/permissionService");
 const { insiderThreatRisk, threatLevel } = require("../services/riskEngine");
 const { createAlert } = require("../services/alertService");
 const { detectMaliciousDocument } = require("../services/mlService");
+const { ensureDefaultDocuments } = require("../services/defaultDocumentService");
 
 async function parseUploadedText(file) {
   const ext = path.extname(file.originalname).toLowerCase();
@@ -28,6 +29,8 @@ async function parseUploadedText(file) {
 }
 
 async function listDocuments(req, res) {
+  await ensureDefaultDocuments();
+
   if (req.user.role === "Admin") {
     const documents = await Document.find().sort({ createdAt: -1 });
     return res.json({ documents });
@@ -58,6 +61,8 @@ async function listDocuments(req, res) {
 }
 
 async function accessDocument(req, res) {
+  await ensureDefaultDocuments();
+
   const { documentId } = req.params;
   const { action = "view", override = false } = req.body;
 
