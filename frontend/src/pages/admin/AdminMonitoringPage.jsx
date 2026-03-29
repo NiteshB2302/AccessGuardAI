@@ -25,6 +25,9 @@ function incidentTone(status) {
   if (["blocked_pending_override", "blocked_by_policy", "sent_override"].includes(normalized)) {
     return "border-cyber-threat/40 bg-cyber-threat/10 text-cyber-threat";
   }
+  if (["approved_to_send", "sent", "resolved"].includes(normalized)) {
+    return "border-cyber-safe/40 bg-cyber-safe/10 text-cyber-safe";
+  }
   if (["approval_requested", "investigating"].includes(normalized)) {
     return "border-cyber-warn/40 bg-cyber-warn/10 text-cyber-warn";
   }
@@ -35,6 +38,10 @@ function normalizeIncidentStatus(status) {
   return String(status || "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeEmployeeID(value) {
+  return String(value || "").trim().toUpperCase();
 }
 
 export default function AdminMonitoringPage() {
@@ -82,7 +89,7 @@ export default function AdminMonitoringPage() {
   const employeeStatusMap = useMemo(
     () =>
       employees.reduce((acc, user) => {
-        acc[user.employeeID] = user.accountStatus || "Active";
+        acc[normalizeEmployeeID(user.employeeID)] = user.accountStatus || "Active";
         return acc;
       }, {}),
     [employees]
@@ -91,7 +98,7 @@ export default function AdminMonitoringPage() {
   const employeeRoleMap = useMemo(
     () =>
       employees.reduce((acc, user) => {
-        acc[user.employeeID] = user.role;
+        acc[normalizeEmployeeID(user.employeeID)] = user.role;
         return acc;
       }, {}),
     [employees]
@@ -99,15 +106,35 @@ export default function AdminMonitoringPage() {
 
   const mergedRiskRows = useMemo(
     () =>
-      riskTable.map((row) => ({
-        ...row,
-        accountStatus: employeeStatusMap[row.employeeID] || row.accountStatus || "Active"
-      })),
+      riskTable.map((row) => {
+        const normalizedEmployeeID = normalizeEmployeeID(row.employeeID);
+        return {
+          ...row,
+          accountStatus: employeeStatusMap[normalizedEmployeeID] || row.accountStatus || "Active"
+        };
+      }),
     [riskTable, employeeStatusMap]
   );
 
   const handleSendAlert = async (rowOrEmployeeID, contextLabel = "suspicious activity") => {
-    const employeeID = typeof rowOrEmployeeID === "string" ? rowOrEmployeeID : rowOrEmployeeID.employeeID;
+    const employeeID = normalizeEmployeeID(
+      typeof rowOrEmployeeID === "string" ? rowOrEmployeeID : rowOrEmployeeID.employeeID
+    );
+    if (!employeeID) {
+      setActionMessage("Unable to send alert: missing employee reference in incident.");
+      return;
+    }
+
+    const employeeRole = employeeRoleMap[employeeID];
+    if (!employeeRole) {
+      setActionMessage(`Cannot send alert: ${employeeID} no longer exists in employee directory.`);
+      return;
+    }
+    if (employeeRole === "Admin") {
+      setActionMessage("Admin accounts cannot receive this alert action.");
+      return;
+    }
+
     const threatLevel = typeof rowOrEmployeeID === "string" ? "Warning" : rowOrEmployeeID.threatLevel;
     const riskScore = typeof rowOrEmployeeID === "string" ? 0.7 : rowOrEmployeeID.riskScore;
 
@@ -133,7 +160,24 @@ export default function AdminMonitoringPage() {
   };
 
   const handleBlockToggle = async (rowOrEmployeeID) => {
-    const employeeID = typeof rowOrEmployeeID === "string" ? rowOrEmployeeID : rowOrEmployeeID.employeeID;
+    const employeeID = normalizeEmployeeID(
+      typeof rowOrEmployeeID === "string" ? rowOrEmployeeID : rowOrEmployeeID.employeeID
+    );
+    if (!employeeID) {
+      setActionMessage("Unable to update account status: missing employee reference in incident.");
+      return;
+    }
+
+    const employeeRole = employeeRoleMap[employeeID];
+    if (!employeeRole) {
+      setActionMessage(`Cannot update account status: ${employeeID} does not exist anymore.`);
+      return;
+    }
+    if (employeeRole === "Admin") {
+      setActionMessage("Admin accounts cannot be blocked from this queue.");
+      return;
+    }
+
     const currentStatus =
       typeof rowOrEmployeeID === "string"
         ? employeeStatusMap[employeeID] || "Active"
@@ -272,56 +316,76 @@ export default function AdminMonitoringPage() {
               </thead>
               <tbody>
                 {exfilIncidents.map((incident) => (
-                  <tr
-                    key={incident._id}
-                    className={`border-t border-cyber-accent/10 ${
-                      incident.riskScore >= 0.7 || ["blocked_by_policy", "sent_override"].includes(incident.status)
-                        ? "bg-cyber-threat/10"
-                        : ""
-                    }`}
-                  >
-                    <td className="py-2 font-mono text-xs text-slate-300">{incident.employeeID}</td>
-                    <td className="py-2 text-slate-100">{incident.recipientEmail}</td>
-                    <td className="py-2 text-slate-300">{incident.documentName || "Message Only"}</td>
-                    <td className="py-2 font-semibold text-slate-100">{incident.riskScore}</td>
-                    <td className="py-2">
-                      <span className={`rounded-full border px-2 py-0.5 text-xs ${incidentTone(incident.status)}`}>
-                        {normalizeIncidentStatus(incident.status)}
-                      </span>
-                    </td>
-                    <td className="py-2">
-                      <div className="flex flex-wrap gap-1">
-                        <button
-                          onClick={() => handleSendAlert(incident.employeeID, "possible data exfiltration")}
-                          disabled={employeeRoleMap[incident.employeeID] === "Admin"}
-                          className="rounded-lg border border-cyber-warn/35 bg-cyber-warn/10 px-2 py-1 text-xs text-cyber-warn disabled:opacity-60"
-                        >
-                          Alert
-                        </button>
-                        <button
-                          onClick={() => handleBlockToggle(incident.employeeID)}
-                          disabled={employeeRoleMap[incident.employeeID] === "Admin"}
-                          className="rounded-lg border border-cyber-threat/35 bg-cyber-threat/10 px-2 py-1 text-xs text-cyber-threat disabled:opacity-60"
-                        >
-                          {employeeStatusMap[incident.employeeID] === "Blocked" ? "Unblock" : "Block"}
-                        </button>
-                        <button
-                          onClick={() => handleIncidentStatus(incident, "investigating")}
-                          disabled={loadingAction === `incident-${incident._id}-investigating`}
-                          className="rounded-lg border border-cyber-accent/35 bg-cyber-accent/10 px-2 py-1 text-xs text-cyber-accent disabled:opacity-60"
-                        >
-                          Investigate
-                        </button>
-                        <button
-                          onClick={() => handleIncidentStatus(incident, "resolved")}
-                          disabled={loadingAction === `incident-${incident._id}-resolved`}
-                          className="rounded-lg border border-cyber-safe/35 bg-cyber-safe/10 px-2 py-1 text-xs text-cyber-safe disabled:opacity-60"
-                        >
-                          Resolve
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  (() => {
+                    const incidentEmployeeID = normalizeEmployeeID(incident.employeeID);
+                    const employeeRole = employeeRoleMap[incidentEmployeeID];
+                    const employeeExists = Boolean(employeeRole);
+                    const isAdminEmployee = employeeRole === "Admin";
+                    return (
+                      <tr
+                        key={incident._id}
+                        className={`border-t border-cyber-accent/10 ${
+                          incident.riskScore >= 0.7 || ["blocked_by_policy", "sent_override"].includes(incident.status)
+                            ? "bg-cyber-threat/10"
+                            : ""
+                        }`}
+                      >
+                        <td className="py-2 font-mono text-xs text-slate-300">
+                          {incidentEmployeeID || "-"}
+                          {!employeeExists && (
+                            <p className="text-[10px] text-cyber-warn">Archived employee</p>
+                          )}
+                        </td>
+                        <td className="py-2 text-slate-100">{incident.recipientEmail}</td>
+                        <td className="py-2 text-slate-300">{incident.documentName || "Message Only"}</td>
+                        <td className="py-2 font-semibold text-slate-100">{incident.riskScore}</td>
+                        <td className="py-2">
+                          <span className={`rounded-full border px-2 py-0.5 text-xs ${incidentTone(incident.status)}`}>
+                            {normalizeIncidentStatus(incident.status)}
+                          </span>
+                        </td>
+                        <td className="py-2">
+                          <div className="flex flex-wrap gap-1">
+                            <button
+                              onClick={() => handleSendAlert(incidentEmployeeID, "possible data exfiltration")}
+                              disabled={!employeeExists || isAdminEmployee}
+                              className="rounded-lg border border-cyber-warn/35 bg-cyber-warn/10 px-2 py-1 text-xs text-cyber-warn disabled:opacity-60"
+                            >
+                              Alert
+                            </button>
+                            <button
+                              onClick={() => handleBlockToggle(incidentEmployeeID)}
+                              disabled={!employeeExists || isAdminEmployee}
+                              className="rounded-lg border border-cyber-threat/35 bg-cyber-threat/10 px-2 py-1 text-xs text-cyber-threat disabled:opacity-60"
+                            >
+                              {employeeStatusMap[incidentEmployeeID] === "Blocked" ? "Unblock" : "Block"}
+                            </button>
+                            <button
+                              onClick={() => handleIncidentStatus(incident, "approved_to_send")}
+                              disabled={loadingAction === `incident-${incident._id}-approved_to_send`}
+                              className="rounded-lg border border-cyber-safe/35 bg-cyber-safe/10 px-2 py-1 text-xs text-cyber-safe disabled:opacity-60"
+                            >
+                              Approve Send
+                            </button>
+                            <button
+                              onClick={() => handleIncidentStatus(incident, "investigating")}
+                              disabled={loadingAction === `incident-${incident._id}-investigating`}
+                              className="rounded-lg border border-cyber-accent/35 bg-cyber-accent/10 px-2 py-1 text-xs text-cyber-accent disabled:opacity-60"
+                            >
+                              Investigate
+                            </button>
+                            <button
+                              onClick={() => handleIncidentStatus(incident, "resolved")}
+                              disabled={loadingAction === `incident-${incident._id}-resolved`}
+                              className="rounded-lg border border-cyber-safe/35 bg-cyber-safe/10 px-2 py-1 text-xs text-cyber-safe disabled:opacity-60"
+                            >
+                              Resolve
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })()
                 ))}
                 {exfilIncidents.length === 0 && (
                   <tr>

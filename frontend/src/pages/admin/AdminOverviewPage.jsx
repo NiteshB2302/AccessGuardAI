@@ -125,10 +125,22 @@ export default function AdminOverviewPage() {
             progress={toProgress(overview.maliciousDocuments || 0, 10)}
           />
           <StatCard
+            title="Documents Scanned"
+            value={overview.documentScans || 0}
+            indicator="safe"
+            progress={toProgress(overview.documentScans || 0, 50)}
+          />
+          <StatCard
             title="Spam Emails Detected"
             value={overview.spamEmailsDetected || 0}
             indicator={(overview.spamEmailsDetected || 0) > 0 ? "warning" : "safe"}
             progress={toProgress(overview.spamEmailsDetected || 0, 20)}
+          />
+          <StatCard
+            title="Emails Scanned"
+            value={overview.emailScans || 0}
+            indicator="safe"
+            progress={toProgress(overview.emailScans || 0, 80)}
           />
           <StatCard
             title="Data Exfil Attempts"

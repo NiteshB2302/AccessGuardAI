@@ -77,6 +77,7 @@ const exfiltrationIncidentSchema = new mongoose.Schema(
         "analyzed",
         "blocked_pending_override",
         "approval_requested",
+        "approved_to_send",
         "sent",
         "sent_override",
         "cancelled",

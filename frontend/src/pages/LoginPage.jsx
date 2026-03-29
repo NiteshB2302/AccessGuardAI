@@ -8,8 +8,8 @@ import { bootstrapAdmin } from "../services/authService";
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [email, setEmail] = useState("admin@accessguard.ai");
-  const [password, setPassword] = useState("Admin@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [bootstrapMessage, setBootstrapMessage] = useState("");
@@ -31,8 +31,8 @@ export default function LoginPage() {
   const handleBootstrap = async () => {
     setBootstrapMessage("");
     try {
-      const result = await bootstrapAdmin();
-      setBootstrapMessage(`Bootstrap complete. Use ${result.credentials.email} / ${result.credentials.password}`);
+      await bootstrapAdmin();
+      setBootstrapMessage("Bootstrap complete. Admin account is initialized.");
     } catch (err) {
       setBootstrapMessage(err?.response?.data?.message || "Bootstrap unavailable.");
     }
@@ -102,7 +102,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-xl border border-cyber-accent/25 bg-white/85 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyber-accent focus:shadow-panel"
-                placeholder="admin@accessguard.ai"
+                placeholder="Enter your email"
               />
             </div>
             <div>
@@ -112,7 +112,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-xl border border-cyber-accent/25 bg-white/85 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyber-accent focus:shadow-panel"
-                placeholder="********"
+                placeholder="Enter your password"
               />
             </div>
 
@@ -125,12 +125,6 @@ export default function LoginPage() {
               {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
-
-          <div className="mt-5 rounded-xl border border-cyber-safe/25 bg-cyber-safe/10 p-3 text-xs text-slate-700">
-            <p className="font-semibold text-cyber-safe">Demo Credentials</p>
-            <p>Admin: admin@accessguard.ai / Admin@123</p>
-            <p>Employee: dev@accessguard.ai / Emp@123456</p>
-          </div>
 
           <button
             onClick={handleBootstrap}

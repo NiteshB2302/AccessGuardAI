@@ -49,6 +49,13 @@ export async function fetchRiskTable() {
   return data.table;
 }
 
+export async function fetchDetectionHistory(limit = 120) {
+  const { data } = await api.get("/threats/detection-history", {
+    params: { limit }
+  });
+  return data;
+}
+
 export async function scanEmail(content) {
   const { data } = await api.post("/threats/email-scan", { content });
   return data;

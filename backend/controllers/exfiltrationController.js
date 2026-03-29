@@ -4,6 +4,7 @@ const Alert = require("../models/Alert");
 const DetectionResult = require("../models/DetectionResult");
 const Document = require("../models/Document");
 const ExfiltrationIncident = require("../models/ExfiltrationIncident");
+const User = require("../models/User");
 const UserActivity = require("../models/UserActivity");
 const { createAlert } = require("../services/alertService");
 const { detectDataExfiltration } = require("../services/mlService");
@@ -323,7 +324,7 @@ async function decideSecureShare(req, res) {
     return res.status(400).json({ message: "Invalid incident id." });
   }
 
-  const validDecisions = ["send", "send_anyway", "request_approval", "cancel"];
+  const validDecisions = ["send", "request_approval", "cancel"];
   if (!validDecisions.includes(decision)) {
     return res.status(400).json({ message: "Invalid decision." });
   }
@@ -343,6 +344,8 @@ async function decideSecureShare(req, res) {
     department: req.user.department,
     sensitivityLevel: incident.sensitivityLevel || null
   };
+  const adminApproved =
+    incident.status === "approved_to_send" || incident.adminAction?.status === "approved_to_send";
 
   if (decision === "cancel") {
     incident.status = "cancelled";
@@ -394,7 +397,7 @@ async function decideSecureShare(req, res) {
     });
   }
 
-  if (incident.hardBlocked) {
+  if (incident.hardBlocked && !adminApproved) {
     incident.status = "blocked_by_policy";
     await incident.save();
     await UserActivity.create({
@@ -412,7 +415,7 @@ async function decideSecureShare(req, res) {
     });
   }
 
-  if (decision === "send" && incident.requiresOverride) {
+  if (decision === "send" && incident.requiresOverride && !adminApproved) {
     incident.status = "blocked_pending_override";
     await incident.save();
     await UserActivity.create({
@@ -431,8 +434,8 @@ async function decideSecureShare(req, res) {
     });
   }
 
-  const overrideUsed = decision === "send_anyway";
-  incident.status = overrideUsed ? "sent_override" : "sent";
+  const overrideUsed = false;
+  incident.status = "sent";
   await incident.save();
 
   await UserActivity.create({
@@ -464,9 +467,7 @@ async function decideSecureShare(req, res) {
   }
 
   return res.json({
-    message: overrideUsed
-      ? "Email sent with override and elevated monitoring."
-      : "Email sent successfully.",
+    message: adminApproved ? "Email sent successfully after admin approval." : "Email sent successfully.",
     incident: {
       id: incident._id,
       status: incident.status
@@ -488,13 +489,30 @@ async function getMySecureShareIncidents(req, res) {
 
 async function getExfiltrationIncidents(req, res) {
   const { status, employeeID } = req.query;
+  const includeOrphans = String(req.query.includeOrphans || "false").toLowerCase() === "true";
   const minRisk = Number(req.query.minRisk || 0);
   const requestedLimit = Number(req.query.limit || 120);
   const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 10), 400) : 120;
 
   const query = {};
   if (status) query.status = status;
-  if (employeeID) query.employeeID = employeeID;
+
+  if (!includeOrphans) {
+    const employeeIDs = await User.distinct("employeeID");
+    const validSet = new Set(employeeIDs.map((item) => String(item).trim()));
+    if (employeeID) {
+      const normalizedEmployeeID = String(employeeID).trim();
+      if (!validSet.has(normalizedEmployeeID)) {
+        return res.json({ incidents: [] });
+      }
+      query.employeeID = normalizedEmployeeID;
+    } else {
+      query.employeeID = { $in: [...validSet] };
+    }
+  } else if (employeeID) {
+    query.employeeID = String(employeeID).trim();
+  }
+
   if (!Number.isNaN(minRisk) && minRisk > 0) {
     query.riskScore = { $gte: clampRisk(minRisk) };
   }
@@ -506,7 +524,7 @@ async function getExfiltrationIncidents(req, res) {
 async function updateExfiltrationIncidentStatus(req, res) {
   const { id } = req.params;
   const { status, note = "" } = req.body;
-  const validStatuses = ["investigating", "resolved", "blocked_by_policy"];
+  const validStatuses = ["investigating", "resolved", "blocked_by_policy", "approved_to_send"];
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ message: "Invalid incident id." });
@@ -565,6 +583,19 @@ async function updateExfiltrationIncidentStatus(req, res) {
       },
       { $set: { status: "closed" } }
     );
+  } else if (status === "approved_to_send") {
+    await createAlert({
+      type: "Data Exfiltration",
+      severity: "warning",
+      employeeID: incident.employeeID,
+      riskScore: Number(Math.max(incident.riskScore || 0, 0.5).toFixed(2)),
+      message: `Admin approved secure-share transmission for incident ${incident._id}.`,
+      metadata: {
+        incidentId: incident._id,
+        actionBy: req.user.employeeID,
+        note
+      }
+    });
   }
 
   return res.json({

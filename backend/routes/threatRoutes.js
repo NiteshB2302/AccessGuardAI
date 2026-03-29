@@ -12,7 +12,8 @@ const {
   scanEmail,
   detectRoleMisuseByUpload,
   detectRoleMisuseFromSystemData,
-  getRiskTable
+  getRiskTable,
+  getDetectionHistory
 } = require("../controllers/threatController");
 const {
   getExfiltrationIncidents,
@@ -37,6 +38,7 @@ router.get("/timeline-analytics", asyncHandler(getTimelineAnalytics));
 router.get("/live-feed", asyncHandler(getLiveFeed));
 router.get("/alerts", asyncHandler(getAlerts));
 router.get("/risk-table", asyncHandler(getRiskTable));
+router.get("/detection-history", asyncHandler(getDetectionHistory));
 router.patch("/alerts/:id", asyncHandler(updateAlertStatus));
 router.post("/alerts/resolve-all", asyncHandler(resolveAlerts));
 router.post("/email-scan", asyncHandler(scanEmail));

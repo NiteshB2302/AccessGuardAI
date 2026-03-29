@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Lock, Mail, Send, ShieldCheck, ShieldX } from "lucide-react";
+import { AlertTriangle, Lock, Mail, Send, ShieldCheck } from "lucide-react";
 import {
   analyzeSecureShare,
   decideSecureShare,
@@ -18,6 +18,9 @@ function badgeForStatus(status) {
   const key = String(status || "").toLowerCase();
   if (["blocked_pending_override", "blocked_by_policy", "sent_override"].includes(key)) {
     return "border-cyber-threat/45 bg-cyber-threat/10 text-cyber-threat";
+  }
+  if (["approved_to_send", "sent", "resolved"].includes(key)) {
+    return "border-cyber-safe/45 bg-cyber-safe/10 text-cyber-safe";
   }
   if (["approval_requested", "investigating"].includes(key)) {
     return "border-cyber-warn/45 bg-cyber-warn/10 text-cyber-warn";
@@ -58,10 +61,38 @@ export default function EmployeeSecureSharePage() {
     loadData().catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!analysisResult?.incident?.id) return;
+    const live = incidents.find((item) => item._id === analysisResult.incident.id);
+    if (!live || live.status === analysisResult.incident.status) return;
+    setAnalysisResult((prev) =>
+      prev
+        ? {
+            ...prev,
+            incident: {
+              ...prev.incident,
+              status: live.status
+            }
+          }
+        : prev
+    );
+  }, [incidents, analysisResult]);
+
   const selectedDocument = useMemo(
     () => documents.find((item) => item.documentID === form.documentId) || null,
     [documents, form.documentId]
   );
+
+  const incidentSummary = useMemo(() => {
+    const total = incidents.length;
+    const approved = incidents.filter((item) => String(item.status).toLowerCase() === "approved_to_send").length;
+    const sent = incidents.filter((item) => ["sent", "sent_override"].includes(String(item.status).toLowerCase())).length;
+    const blocked = incidents.filter((item) =>
+      ["blocked_pending_override", "blocked_by_policy", "cancelled"].includes(String(item.status).toLowerCase())
+    ).length;
+
+    return { total, approved, sent, blocked };
+  }, [incidents]);
 
   const handleAnalyze = async () => {
     if (!form.recipientEmail.trim() || !form.content.trim()) {
@@ -116,6 +147,19 @@ export default function EmployeeSecureSharePage() {
   };
 
   const scoreWidth = `${Math.round((analysisResult?.analysis?.riskScore || 0) * 100)}%`;
+  const activeIncidentStatus = useMemo(() => {
+    const status =
+      incidents.find((item) => item._id === analysisResult?.incident?.id)?.status || analysisResult?.incident?.status;
+    return String(status || "").toLowerCase();
+  }, [incidents, analysisResult]);
+
+  const isApprovalRequired = Boolean(analysisResult?.analysis?.requiresOverride);
+  const hasAdminApproval = activeIncidentStatus === "approved_to_send";
+  const canSendNow = Boolean(analysisResult) && (!isApprovalRequired || hasAdminApproval);
+  const displayThreatLevel = hasAdminApproval
+    ? "Safe (Admin Approved)"
+    : analysisResult?.analysis?.threatLevel || "Safe";
+  const displayThreatTone = hasAdminApproval ? "text-cyber-safe" : riskTone(analysisResult?.analysis?.riskScore || 0);
 
   return (
     <div className="space-y-4">
@@ -143,6 +187,25 @@ export default function EmployeeSecureSharePage() {
           {message}
         </div>
       )}
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="glass-panel rounded-2xl border border-cyber-accent/20 p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-400">Total History</p>
+          <p className="mt-2 font-display text-2xl text-slate-900">{incidentSummary.total}</p>
+        </div>
+        <div className="glass-panel rounded-2xl border border-cyber-accent/20 p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-400">Approved</p>
+          <p className="mt-2 font-display text-2xl text-cyber-safe">{incidentSummary.approved}</p>
+        </div>
+        <div className="glass-panel rounded-2xl border border-cyber-accent/20 p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-400">Sent</p>
+          <p className="mt-2 font-display text-2xl text-cyber-accent">{incidentSummary.sent}</p>
+        </div>
+        <div className="glass-panel rounded-2xl border border-cyber-accent/20 p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-400">Blocked</p>
+          <p className="mt-2 font-display text-2xl text-cyber-threat">{incidentSummary.blocked}</p>
+        </div>
+      </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.1fr,1fr]">
         <div className="glass-panel rounded-2xl border border-cyber-accent/20 p-4">
@@ -185,7 +248,7 @@ export default function EmployeeSecureSharePage() {
               </select>
               {selectedDocument && (
                 <p className="mt-1 text-xs text-slate-400">
-                  {selectedDocument.department} • {selectedDocument.sensitivityLevel}
+                  {selectedDocument.department} | {selectedDocument.sensitivityLevel}
                 </p>
               )}
             </div>
@@ -239,8 +302,8 @@ export default function EmployeeSecureSharePage() {
                 </div>
                 <p className="mt-2 text-sm text-slate-200">
                   Threat Level:{" "}
-                  <span className={riskTone(analysisResult.analysis.riskScore)}>
-                    {analysisResult.analysis.threatLevel}
+                  <span className={displayThreatTone}>
+                    {displayThreatLevel}
                   </span>
                 </p>
                 <p className="mt-1 text-xs text-slate-400">{analysisResult.analysis.recommendation}</p>
@@ -280,36 +343,31 @@ export default function EmployeeSecureSharePage() {
 
               <div className="rounded-xl border border-cyber-accent/20 bg-cyber-base/45 p-3 text-xs text-slate-300">
                 <p className="text-slate-400">Incident Status</p>
-                <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 ${badgeForStatus(analysisResult.incident.status)}`}>
-                  {statusLabel(analysisResult.incident.status)}
+                <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 ${badgeForStatus(activeIncidentStatus)}`}>
+                  {statusLabel(activeIncidentStatus)}
                 </span>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => handleDecision("send")}
-                  disabled={decisionLoading === "send"}
-                  className="inline-flex items-center gap-1 rounded-lg border border-cyber-safe/35 bg-cyber-safe/10 px-3 py-1.5 text-xs text-cyber-safe disabled:opacity-70"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  Send
-                </button>
-                <button
-                  onClick={() => handleDecision("send_anyway")}
-                  disabled={analysisResult.analysis.hardBlocked || decisionLoading === "send_anyway"}
-                  className="inline-flex items-center gap-1 rounded-lg border border-cyber-threat/35 bg-cyber-threat/10 px-3 py-1.5 text-xs text-cyber-threat disabled:opacity-55"
-                >
-                  <ShieldX className="h-3.5 w-3.5" />
-                  Send Anyway
-                </button>
-                <button
-                  onClick={() => handleDecision("request_approval")}
-                  disabled={decisionLoading === "request_approval"}
-                  className="inline-flex items-center gap-1 rounded-lg border border-cyber-warn/35 bg-cyber-warn/10 px-3 py-1.5 text-xs text-cyber-warn disabled:opacity-70"
-                >
-                  <Lock className="h-3.5 w-3.5" />
-                  Request Approval
-                </button>
+                {canSendNow ? (
+                  <button
+                    onClick={() => handleDecision("send")}
+                    disabled={decisionLoading === "send"}
+                    className="inline-flex items-center gap-1 rounded-lg border border-cyber-safe/35 bg-cyber-safe/10 px-3 py-1.5 text-xs text-cyber-safe disabled:opacity-70"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    Send
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleDecision("request_approval")}
+                    disabled={decisionLoading === "request_approval"}
+                    className="inline-flex items-center gap-1 rounded-lg border border-cyber-warn/35 bg-cyber-warn/10 px-3 py-1.5 text-xs text-cyber-warn disabled:opacity-70"
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    Request Admin Approval
+                  </button>
+                )}
                 <button
                   onClick={() => handleDecision("cancel")}
                   disabled={decisionLoading === "cancel"}
@@ -320,11 +378,20 @@ export default function EmployeeSecureSharePage() {
                 </button>
               </div>
 
-              {analysisResult.analysis.hardBlocked && (
-                <div className="rounded-xl border border-cyber-threat/40 bg-cyber-threat/10 p-2 text-xs text-cyber-threat">
+              {!canSendNow && isApprovalRequired && (
+                <div className="rounded-xl border border-cyber-warn/40 bg-cyber-warn/10 p-2 text-xs text-cyber-warn">
                   <span className="inline-flex items-center gap-1">
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    Hard policy block: this transmission cannot be sent.
+                    Admin approval is required before this email can be sent.
+                  </span>
+                </div>
+              )}
+
+              {hasAdminApproval && (
+                <div className="rounded-xl border border-cyber-safe/40 bg-cyber-safe/10 p-2 text-xs text-cyber-safe">
+                  <span className="inline-flex items-center gap-1">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Admin approved. This email is now cleared to send.
                   </span>
                 </div>
               )}

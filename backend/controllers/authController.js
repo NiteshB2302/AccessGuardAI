@@ -36,11 +36,7 @@ async function bootstrapAdmin(req, res) {
 
   return res.status(201).json({
     message: "Admin account bootstrapped successfully.",
-    employeeID: admin.employeeID,
-    credentials: {
-      email: payload.email,
-      password: payload.password
-    }
+    employeeID: admin.employeeID
   });
 }
 

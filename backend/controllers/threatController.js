@@ -307,27 +307,43 @@ async function getOverview(req, res) {
     getBlockedEmployeeIDs()
   ]);
 
-  const [activeAlerts, blockedQueueAlerts, maliciousDocuments, emailDetections, riskTable, exfiltrationAttempts] =
-    await Promise.all([
-      Alert.countDocuments({
-        employeeID: { $in: activeEmployeeIDs },
-        status: "open",
-        "metadata.manual": { $ne: true },
-        "metadata.action": { $nin: ["block", "unblock"] }
-      }),
-      Alert.countDocuments({
-        employeeID: { $in: blockedEmployeeIDs },
-        status: { $ne: "closed" }
-      }),
-      DetectionResult.countDocuments({
-        type: "Document",
-        createdBy: { $in: [...activeEmployeeIDs, ...blockedEmployeeIDs] },
-        riskScore: { $gte: 0.7 }
-      }),
-      DetectionResult.find({ type: "Email", createdBy: { $in: [...activeEmployeeIDs, ...blockedEmployeeIDs] } }),
-      buildEmployeeRiskTable(),
-      ExfiltrationIncident.countDocuments({ employeeID: { $in: activeEmployeeIDs }, riskScore: { $gte: 0.65 } })
-    ]);
+  const [
+    activeAlerts,
+    blockedQueueAlerts,
+    maliciousDocuments,
+    documentScans,
+    emailDetections,
+    emailScans,
+    riskTable,
+    exfiltrationAttempts
+  ] = await Promise.all([
+    Alert.countDocuments({
+      employeeID: { $in: activeEmployeeIDs },
+      status: "open",
+      "metadata.manual": { $ne: true },
+      "metadata.action": { $nin: ["block", "unblock"] }
+    }),
+    Alert.countDocuments({
+      employeeID: { $in: blockedEmployeeIDs },
+      status: { $ne: "closed" }
+    }),
+    DetectionResult.countDocuments({
+      type: "Document",
+      createdBy: { $in: [...activeEmployeeIDs, ...blockedEmployeeIDs] },
+      riskScore: { $gte: 0.7 }
+    }),
+    DetectionResult.countDocuments({
+      type: "Document",
+      createdBy: { $in: [...activeEmployeeIDs, ...blockedEmployeeIDs] }
+    }),
+    DetectionResult.find({ type: "Email", createdBy: { $in: [...activeEmployeeIDs, ...blockedEmployeeIDs] } }),
+    DetectionResult.countDocuments({
+      type: "Email",
+      createdBy: { $in: [...activeEmployeeIDs, ...blockedEmployeeIDs] }
+    }),
+    buildEmployeeRiskTable(),
+    ExfiltrationIncident.countDocuments({ employeeID: { $in: activeEmployeeIDs }, riskScore: { $gte: 0.65 } })
+  ]);
 
   const activeRiskRows = riskTable.filter((item) => item.accountStatus !== "Blocked");
   const blockedRiskRows = riskTable.filter((item) => item.accountStatus === "Blocked");
@@ -348,7 +364,9 @@ async function getOverview(req, res) {
     blockedUserAlertQueue: blockedQueueAlerts,
     suspiciousEmployees,
     maliciousDocuments,
+    documentScans,
     spamEmailsDetected,
+    emailScans,
     dataExfiltrationAttempts: exfiltrationAttempts,
     systemOverallRiskScore: Number(avgRisk.toFixed(2)),
     activeRiskEmployees: activeRiskRows.length,
@@ -869,6 +887,47 @@ async function getRiskTable(req, res) {
   return res.json({ table });
 }
 
+async function getDetectionHistory(req, res) {
+  const requestedLimit = Number(req.query.limit || 120);
+  const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 20), 400) : 120;
+  const [activeEmployeeIDs, blockedEmployeeIDs] = await Promise.all([
+    getActiveEmployeeIDs(),
+    getBlockedEmployeeIDs()
+  ]);
+  const employeeIDs = [...activeEmployeeIDs, ...blockedEmployeeIDs];
+
+  const [documentScans, emailScans, rows] = await Promise.all([
+    DetectionResult.countDocuments({ type: "Document", createdBy: { $in: employeeIDs } }),
+    DetectionResult.countDocuments({ type: "Email", createdBy: { $in: employeeIDs } }),
+    DetectionResult.find({
+      type: { $in: ["Document", "Email"] },
+      createdBy: { $in: employeeIDs }
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+  ]);
+
+  const history = rows.map((row) => ({
+    id: row._id,
+    type: row.type,
+    sourceName: row.sourceName,
+    prediction: row.prediction,
+    riskScore: Number(Number(row.riskScore || 0).toFixed(2)),
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    details: row.details || {}
+  }));
+
+  return res.json({
+    totals: {
+      documentScans,
+      emailScans,
+      total: documentScans + emailScans
+    },
+    history
+  });
+}
+
 module.exports = {
   getOverview,
   getAnalytics,
@@ -881,5 +940,6 @@ module.exports = {
   scanEmail,
   detectRoleMisuseByUpload,
   detectRoleMisuseFromSystemData,
-  getRiskTable
+  getRiskTable,
+  getDetectionHistory
 };
