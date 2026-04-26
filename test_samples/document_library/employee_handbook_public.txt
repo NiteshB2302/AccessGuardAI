@@ -1,0 +1,14 @@
+Employee Handbook (Public Edition)
+
+Welcome
+Access Guard AI supports secure collaboration, role-based access, and responsible data sharing.
+
+General Policies
+- Keep your account credentials private.
+- Do not share restricted files outside approved channels.
+- Report suspicious login prompts or unknown file access alerts immediately.
+
+Useful Contacts
+- HR Helpdesk: hr-help@company.local
+- IT Support: it-support@company.local
+- Security Response: soc@company.local

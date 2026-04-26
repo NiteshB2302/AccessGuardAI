@@ -1,0 +1,97 @@
+{
+  "config": {
+    "split": "80/20",
+    "random_state": 42,
+    "stratify": true,
+    "challenge_layer": true,
+    "binary_test_label_uncertainty": {
+      "document": 0.09,
+      "data_exfiltration": 0.11
+    }
+  },
+  "datasets": {
+    "document": "C:\\Users\\VIVEK\\OneDrive\\Desktop\\MVP AI\\access-guard-ai\\ml_models\\datasets\\document_detector_dataset.csv",
+    "email": "C:\\Users\\VIVEK\\OneDrive\\Desktop\\MVP AI\\access-guard-ai\\ml_models\\datasets\\spam_email_dataset.csv",
+    "data_exfiltration": "C:\\Users\\VIVEK\\OneDrive\\Desktop\\MVP AI\\access-guard-ai\\ml_models\\datasets\\data_exfiltration_dataset.csv",
+    "role_misuse": "C:\\Users\\VIVEK\\OneDrive\\Desktop\\MVP AI\\access-guard-ai\\ml_models\\datasets\\role_misuse_dataset.csv"
+  },
+  "metrics": {
+    "document_detector": {
+      "accuracy": 0.8571428571428571,
+      "precision": 0.8100358422939068,
+      "recall": 0.9224489795918367,
+      "f1": 0.8625954198473282,
+      "confusion_matrix": [
+        [
+          206,
+          53
+        ],
+        [
+          19,
+          226
+        ]
+      ],
+      "classification_report": "              precision    recall  f1-score   support\n\n           0      0.916     0.795     0.851       259\n           1      0.810     0.922     0.863       245\n\n    accuracy                          0.857       504\n   macro avg      0.863     0.859     0.857       504\nweighted avg      0.864     0.857     0.857       504\n",
+      "roc_auc": 0.9097155464502404
+    },
+    "spam_email_detector": {
+      "accuracy": 0.9333333333333333,
+      "macro_f1": 0.9330504923528179,
+      "confusion_matrix": [
+        [
+          200,
+          0,
+          0
+        ],
+        [
+          20,
+          170,
+          10
+        ],
+        [
+          10,
+          0,
+          190
+        ]
+      ],
+      "classification_report": "              precision    recall  f1-score   support\n\n    phishing      0.870     1.000     0.930       200\n        safe      1.000     0.850     0.919       200\n        spam      0.950     0.950     0.950       200\n\n    accuracy                          0.933       600\n   macro avg      0.940     0.933     0.933       600\nweighted avg      0.940     0.933     0.933       600\n"
+    },
+    "data_exfiltration_detector": {
+      "accuracy": 0.8729508196721312,
+      "precision": 0.8627450980392157,
+      "recall": 0.8906882591093117,
+      "f1": 0.8764940239043825,
+      "confusion_matrix": [
+        [
+          206,
+          35
+        ],
+        [
+          27,
+          220
+        ]
+      ],
+      "classification_report": "              precision    recall  f1-score   support\n\n           0      0.884     0.855     0.869       241\n           1      0.863     0.891     0.876       247\n\n    accuracy                          0.873       488\n   macro avg      0.873     0.873     0.873       488\nweighted avg      0.873     0.873     0.873       488\n",
+      "roc_auc": 0.8834058494464696,
+      "pr_auc": 0.8600495527658958
+    },
+    "role_misuse_detector": {
+      "accuracy": 0.74,
+      "precision": 0.9,
+      "recall": 0.39375,
+      "f1": 0.5478260869565217,
+      "confusion_matrix": [
+        [
+          233,
+          7
+        ],
+        [
+          97,
+          63
+        ]
+      ],
+      "classification_report": "              precision    recall  f1-score   support\n\n           0      0.706     0.971     0.818       240\n           1      0.900     0.394     0.548       160\n\n    accuracy                          0.740       400\n   macro avg      0.803     0.682     0.683       400\nweighted avg      0.784     0.740     0.710       400\n",
+      "pr_auc": 0.8750568783483096
+    }
+  }
+}

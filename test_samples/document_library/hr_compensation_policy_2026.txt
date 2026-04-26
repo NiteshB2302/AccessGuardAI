@@ -1,0 +1,18 @@
+HR Compensation Policy 2026
+
+Owner: People Operations
+Classification: Confidential
+
+Salary Bands
+- Associate Engineer: INR 7.5L - 11.0L
+- Senior Engineer: INR 16.0L - 25.0L
+- Product Manager: INR 18.0L - 28.0L
+
+Performance Revision Cycle
+- Mid-year correction window: July
+- Annual cycle: April
+- Promotion calibration panel required for all grade changes
+
+Confidential Clauses
+- Individual salary details are restricted to HR and approved leadership.
+- Compensation data exports require security logging and approval audit.

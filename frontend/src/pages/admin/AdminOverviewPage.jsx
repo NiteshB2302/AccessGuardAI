@@ -149,6 +149,12 @@ export default function AdminOverviewPage() {
             progress={toProgress(overview.dataExfiltrationAttempts || 0, 10)}
           />
           <StatCard
+            title="Pending Download Approvals"
+            value={overview.pendingDownloadApprovals || 0}
+            indicator={(overview.pendingDownloadApprovals || 0) > 0 ? "warning" : "safe"}
+            progress={toProgress(overview.pendingDownloadApprovals || 0, 20)}
+          />
+          <StatCard
             title="System Overall Risk Score"
             value={systemOverallRiskScore.toFixed(2)}
             indicator={systemRiskIndicator}

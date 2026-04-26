@@ -1,9 +1,11 @@
 const User = require("../models/User");
 const Alert = require("../models/Alert");
 const AccessLog = require("../models/AccessLog");
+const Document = require("../models/Document");
 const ExfiltrationIncident = require("../models/ExfiltrationIncident");
 const UserActivity = require("../models/UserActivity");
 const DetectionResult = require("../models/DetectionResult");
+const DocumentDownloadRequest = require("../models/DocumentDownloadRequest");
 const { createAlert } = require("../services/alertService");
 const { computeBehaviorRisk, filterRiskSignals, threatLevel } = require("../services/riskEngine");
 const { RESOURCE_PERMISSIONS } = require("../services/permissionService");
@@ -262,13 +264,16 @@ async function deleteEmployee(req, res) {
     ]
   };
 
-  const [accessLogs, alerts, activities, exfiltration, detections] = await Promise.all([
-    AccessLog.deleteMany({ employeeID }),
-    Alert.deleteMany({ employeeID }),
-    UserActivity.deleteMany({ employeeID }),
-    ExfiltrationIncident.deleteMany({ employeeID }),
-    DetectionResult.deleteMany(detectionDeleteFilter)
-  ]);
+  const [accessLogs, alerts, activities, exfiltration, downloadRequests, createdDocuments, detections] =
+    await Promise.all([
+      AccessLog.deleteMany({ employeeID }),
+      Alert.deleteMany({ employeeID }),
+      UserActivity.deleteMany({ employeeID }),
+      ExfiltrationIncident.deleteMany({ employeeID }),
+      DocumentDownloadRequest.deleteMany({ employeeID }),
+      Document.deleteMany({ createdBy: employeeID }),
+      DetectionResult.deleteMany(detectionDeleteFilter)
+    ]);
 
   await User.deleteOne({ employeeID });
 
@@ -279,6 +284,8 @@ async function deleteEmployee(req, res) {
       alerts: alerts.deletedCount,
       userActivities: activities.deletedCount,
       exfiltrationIncidents: exfiltration.deletedCount,
+      downloadRequests: downloadRequests.deletedCount,
+      createdDocuments: createdDocuments.deletedCount,
       detectionResults: detections.deletedCount,
       user: 1
     }
@@ -287,7 +294,9 @@ async function deleteEmployee(req, res) {
 
 async function getMyNotifications(req, res) {
   const [alerts, blockedLogs] = await Promise.all([
-    Alert.find({ employeeID: req.user.employeeID }).sort({ createdAt: -1 }).limit(100),
+    Alert.find({ employeeID: req.user.employeeID, type: { $ne: "USB Exfiltration" } })
+      .sort({ createdAt: -1 })
+      .limit(100),
     AccessLog.find({ employeeID: req.user.employeeID, status: "blocked" }).sort({ timestamp: -1 }).limit(100)
   ]);
 
@@ -326,7 +335,9 @@ async function getMySecuritySummary(req, res) {
   const [logs, activities, alerts, exfilIncidents] = await Promise.all([
     AccessLog.find({ employeeID: req.user.employeeID }).sort({ timestamp: -1 }).limit(250),
     UserActivity.find({ employeeID: req.user.employeeID }).sort({ timestamp: -1 }).limit(250),
-    Alert.find({ employeeID: req.user.employeeID }).sort({ createdAt: -1 }).limit(100),
+    Alert.find({ employeeID: req.user.employeeID, type: { $ne: "USB Exfiltration" } })
+      .sort({ createdAt: -1 })
+      .limit(100),
     ExfiltrationIncident.find({ employeeID: req.user.employeeID }).sort({ createdAt: -1 }).limit(80)
   ]);
 

@@ -9,7 +9,7 @@ const UserActivity = require("../models/UserActivity");
 const { createAlert } = require("../services/alertService");
 const { detectDataExfiltration } = require("../services/mlService");
 const { getSensitivityRisk } = require("../services/permissionService");
-const { threatLevel } = require("../services/riskEngine");
+const { threatLevel, shouldForceLockByRisk, enforceCriticalRiskLock } = require("../services/riskEngine");
 
 function clampRisk(value) {
   return Math.max(0, Math.min(1, Number(value || 0)));
@@ -271,6 +271,21 @@ async function analyzeSecureShare(req, res) {
     });
   }
 
+  let lockResult = null;
+  if (hardBlocked || shouldForceLockByRisk(riskScore)) {
+    lockResult = await enforceCriticalRiskLock({
+      employeeID: req.user.employeeID,
+      riskScore,
+      reason: `Critical secure-share exfiltration risk detected for ${document?.name || "message payload"}.`,
+      source: "secure-share-guard",
+      metadata: {
+        incidentId: incident._id,
+        recipientEmail: normalizedRecipient,
+        documentName: document?.name || null
+      }
+    });
+  }
+
   return res.json({
     message: "Secure share analysis completed.",
     incident: {
@@ -312,7 +327,9 @@ async function analyzeSecureShare(req, res) {
         policyMismatch: Number(policyMismatchScore.toFixed(2)),
         keyword: Number(keywordScore.toFixed(2))
       }
-    }
+    },
+    sessionTerminated: Boolean(lockResult?.locked),
+    lockResult
   });
 }
 

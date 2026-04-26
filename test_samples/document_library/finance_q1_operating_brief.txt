@@ -1,0 +1,23 @@
+Finance Division Operating Brief - Q1 FY2026
+
+Prepared by: Corporate Finance Planning Office
+Classification: Confidential
+
+1. Revenue Snapshot
+- Total recognized revenue: INR 48.7 Cr
+- Subscription channel: INR 31.2 Cr
+- Services channel: INR 17.5 Cr
+
+2. Cost and Margin Notes
+- Infrastructure expense increased by 8.2% due to regional expansion.
+- Overall gross margin remained stable at 61.4%.
+- Procurement renegotiation projected to reduce hosting spend by 5% in Q2.
+
+3. Risk Watch Items
+- Delayed enterprise collections from two strategic accounts.
+- Foreign exchange exposure for EU vendor contracts.
+
+4. Recommended Actions
+- Weekly receivable monitoring for top ten customer accounts.
+- Freeze non-critical discretionary spending through May.
+- Increase controls on payment approval workflows above INR 15 Lakh.

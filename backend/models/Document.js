@@ -28,6 +28,10 @@ const documentSchema = new mongoose.Schema(
     tags: {
       type: [String],
       default: []
+    },
+    createdBy: {
+      type: String,
+      default: "SYSTEM_SEED"
     }
   },
   { timestamps: true }

@@ -8,6 +8,7 @@ const UserActivity = require("./models/UserActivity");
 const Alert = require("./models/Alert");
 const DetectionResult = require("./models/DetectionResult");
 const ExfiltrationIncident = require("./models/ExfiltrationIncident");
+const DocumentDownloadRequest = require("./models/DocumentDownloadRequest");
 
 async function cleanupOrphanSecurityData() {
   await connectMongoDB();
@@ -20,12 +21,13 @@ async function cleanupOrphanSecurityData() {
   };
   const orphanCreatedByFilter = { createdBy: { $nin: employeeIDs } };
 
-  const [accessLogs, activities, alerts, detections, incidents] = await Promise.all([
+  const [accessLogs, activities, alerts, detections, incidents, downloadRequests] = await Promise.all([
     AccessLog.deleteMany(orphanEmployeeFilter),
     UserActivity.deleteMany(orphanEmployeeFilter),
     Alert.deleteMany(orphanAlertFilter),
     DetectionResult.deleteMany(orphanCreatedByFilter),
-    ExfiltrationIncident.deleteMany(orphanEmployeeFilter)
+    ExfiltrationIncident.deleteMany(orphanEmployeeFilter),
+    DocumentDownloadRequest.deleteMany(orphanEmployeeFilter)
   ]);
 
   // eslint-disable-next-line no-console
@@ -40,7 +42,8 @@ async function cleanupOrphanSecurityData() {
           userActivities: activities.deletedCount,
           alerts: alerts.deletedCount,
           detectionResults: detections.deletedCount,
-          exfiltrationIncidents: incidents.deletedCount
+          exfiltrationIncidents: incidents.deletedCount,
+          downloadRequests: downloadRequests.deletedCount
         }
       },
       null,

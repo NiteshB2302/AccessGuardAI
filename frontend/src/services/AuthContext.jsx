@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { getCurrentUser, loginUser } from "./authService";
+import { getCurrentUser, loginUser, logoutUser } from "./authService";
 
 const AuthContext = createContext(null);
 
@@ -25,6 +25,16 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    const handleForcedLogout = () => {
+      localStorage.removeItem("access_guard_token");
+      setUser(null);
+    };
+
+    window.addEventListener("access-guard-force-logout", handleForcedLogout);
+    return () => window.removeEventListener("access-guard-force-logout", handleForcedLogout);
+  }, []);
+
   const login = async (email, password) => {
     const data = await loginUser(email, password);
     localStorage.setItem("access_guard_token", data.token);
@@ -32,7 +42,14 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      if (localStorage.getItem("access_guard_token")) {
+        await logoutUser();
+      }
+    } catch {
+      // Ignore logout API failures and clear local session.
+    }
     localStorage.removeItem("access_guard_token");
     setUser(null);
   };
@@ -57,4 +74,3 @@ export function useAuth() {
   }
   return context;
 }
-

@@ -97,6 +97,8 @@ function scoreToRiskLevelLower(score) {
 
 function roleMisuseFallback(payload = {}) {
   const records = Array.isArray(payload.records) ? payload.records : [];
+  const officeHoursStart = Number(process.env.OFFICE_HOURS_START || 9);
+  const officeHoursEnd = Number(process.env.OFFICE_HOURS_END || 18);
 
   const roleRules = {
     intern: ["training", "onboarding", "guide"],
@@ -126,6 +128,7 @@ function roleMisuseFallback(payload = {}) {
     const resource = String(entry.AccessedResource || "").trim();
     const roleText = normalizeText(role);
     const resourceText = normalizeText(resource);
+    const hasSensitiveTerm = sensitiveTerms.some((term) => resourceText.includes(term));
 
     let risk = 0.18;
 
@@ -136,27 +139,54 @@ function roleMisuseFallback(payload = {}) {
       if (!isAllowed) {
         risk += 0.58;
       }
-    } else if (sensitiveTerms.some((term) => resourceText.includes(term))) {
+    } else if (hasSensitiveTerm) {
       risk += 0.22;
     }
 
     const ts = new Date(entry.Timestamp || "");
     const hour = Number.isNaN(ts.getTime()) ? 12 : ts.getHours();
-    if (hour < 6 || hour > 22) {
+    const day = Number.isNaN(ts.getTime()) ? 2 : ts.getDay();
+    const isWeekend = day === 0 || day === 6;
+    const isAfterOfficeHours = hour < officeHoursStart || hour >= officeHoursEnd;
+
+    if (isAfterOfficeHours) {
       risk += 0.18;
     }
+    if (isWeekend) {
+      risk += 0.06;
+    }
 
-    if (sensitiveTerms.some((term) => resourceText.includes(term))) {
+    if (hasSensitiveTerm) {
       risk += 0.14;
     }
 
+    const suspiciousSignals = [];
+    if (matchedRule) {
+      const allowedTokens = matchedRule[1];
+      const isAllowed = allowedTokens.some((token) => resourceText.includes(token));
+      if (!isAllowed) suspiciousSignals.push("role_policy_violation");
+    }
+    if (isAfterOfficeHours) suspiciousSignals.push("after_office_hours_access");
+    if (isWeekend) suspiciousSignals.push("weekend_access");
+    if (hasSensitiveTerm) {
+      suspiciousSignals.push("sensitive_resource_access");
+    }
+    if (!suspiciousSignals.length) suspiciousSignals.push("normal_pattern");
+
     const finalRisk = Number(clamp(risk).toFixed(2));
+    const workTiming = isWeekend ? "weekend" : isAfterOfficeHours ? "after_hours" : "office_hours";
     return {
       EmployeeID: employeeID,
       Role: role,
       AccessedResource: resource,
+      Timestamp: String(entry.Timestamp || "").trim() || new Date().toISOString(),
+      AccessHour: hour,
+      IsAfterOfficeHours: isAfterOfficeHours,
+      IsWeekend: isWeekend,
+      WorkTiming: workTiming,
+      SuspiciousSignals: suspiciousSignals,
       "Risk Score": finalRisk,
-      Status: finalRisk >= 0.68 ? "Suspicious" : "Normal"
+      Status: finalRisk >= 0.68 || (isAfterOfficeHours && finalRisk >= 0.55) ? "Suspicious" : "Normal"
     };
   });
 

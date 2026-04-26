@@ -80,6 +80,20 @@ export async function scanDocument(file) {
   return data;
 }
 
+export async function createDocument(payload) {
+  const form = new FormData();
+  if (payload.file) {
+    form.append("file", payload.file);
+  }
+  if (payload.name) form.append("name", payload.name);
+  if (payload.department) form.append("department", payload.department);
+  if (payload.sensitivityLevel) form.append("sensitivityLevel", payload.sensitivityLevel);
+  if (payload.content) form.append("content", payload.content);
+  if (payload.tags) form.append("tags", payload.tags);
+  const { data } = await api.post("/documents/create", form);
+  return data;
+}
+
 export async function fetchDocuments() {
   const { data } = await api.get("/documents");
   return data.documents;
@@ -90,8 +104,43 @@ export async function accessDocument(documentId, action, override = false) {
   return data;
 }
 
+export async function requestDocumentDownload(documentId, reason = "") {
+  const { data } = await api.post(`/documents/${documentId}/request-download`, { reason });
+  return data;
+}
+
+export async function fetchMyDocumentRequests(limit = 25) {
+  const { data } = await api.get("/documents/download-requests/mine", { params: { limit } });
+  return data.requests || [];
+}
+
+export async function verifyDocumentDownloadOtp(requestId, otp) {
+  const { data } = await api.post(`/documents/download-requests/${requestId}/verify-otp`, { otp });
+  return data;
+}
+
+export async function fetchDocumentDownloadRequests(params = {}) {
+  const { data } = await api.get("/documents/download-requests", { params });
+  return data.requests || [];
+}
+
+export async function approveDocumentDownloadRequest(requestId, note = "") {
+  const { data } = await api.post(`/documents/download-requests/${requestId}/approve`, { note });
+  return data;
+}
+
+export async function rejectDocumentDownloadRequest(requestId, note = "") {
+  const { data } = await api.post(`/documents/download-requests/${requestId}/reject`, { note });
+  return data;
+}
+
 export async function fetchActivity() {
   const { data } = await api.get("/activity/me");
+  return data;
+}
+
+export async function fetchSessionAuditLogs(params = {}) {
+  const { data } = await api.get("/activity/sessions", { params });
   return data;
 }
 

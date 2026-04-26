@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Shield, ShieldAlert, Sparkles } from "lucide-react";
@@ -13,6 +13,15 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [bootstrapMessage, setBootstrapMessage] = useState("");
+  const [securityNotice, setSecurityNotice] = useState("");
+
+  useEffect(() => {
+    const notice = sessionStorage.getItem("access_guard_logout_notice");
+    if (notice) {
+      setSecurityNotice(notice);
+      sessionStorage.removeItem("access_guard_logout_notice");
+    }
+  }, []);
 
   const handleLogin = async (event) => {
     event.preventDefault();
@@ -96,6 +105,11 @@ export default function LoginPage() {
           </div>
 
           <form className="space-y-4" onSubmit={handleLogin}>
+            {securityNotice && (
+              <p className="rounded-lg border border-cyber-warn/40 bg-cyber-warn/15 px-3 py-2 text-sm text-cyber-warn">
+                {securityNotice}
+              </p>
+            )}
             <div>
               <label className="mb-1 block text-sm text-slate-600">Email</label>
               <input

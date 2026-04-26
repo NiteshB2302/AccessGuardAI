@@ -1,0 +1,19 @@
+Operations Disaster Recovery Runbook
+
+Owner: Operations Reliability Team
+Classification: Internal
+
+Incident Severity Matrix
+- SEV-1: customer-impacting outage > 15 minutes
+- SEV-2: degraded service with active workaround
+
+Recovery Sequence
+1. Activate incident commander and notify stakeholders.
+2. Validate data integrity snapshots from primary cluster.
+3. Route traffic to disaster recovery region.
+4. Confirm API health and document portal accessibility.
+5. Publish status summary every 20 minutes until closure.
+
+Post-Incident Requirements
+- Complete root cause analysis within 48 hours.
+- File remediation backlog tickets with owner and due date.

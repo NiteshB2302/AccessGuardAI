@@ -2,12 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import LiveFeed from "../../components/LiveFeed";
 import ThreatLevelBadge from "../../dashboard/ThreatLevelBadge";
 import {
+  approveDocumentDownloadRequest,
   blockEmployeeAccount,
+  fetchDocumentDownloadRequests,
   fetchAlertBuckets,
   fetchExfiltrationIncidents,
   fetchEmployees,
   fetchLiveFeed,
   fetchRiskTable,
+  fetchSessionAuditLogs,
+  rejectDocumentDownloadRequest,
   resolveAlertsBulk,
   sendEmployeeAlert,
   unblockEmployeeAccount,
@@ -44,6 +48,24 @@ function normalizeEmployeeID(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+function sessionTone(entry) {
+  if (entry?.isWeekend) return "border-cyber-warn/40 bg-cyber-warn/10 text-cyber-warn";
+  if (entry?.isAfterOfficeHours) return "border-cyber-threat/40 bg-cyber-threat/10 text-cyber-threat";
+  return "border-cyber-safe/40 bg-cyber-safe/10 text-cyber-safe";
+}
+
+function sessionLabel(entry) {
+  if (entry?.isWeekend) return "Weekend";
+  if (entry?.isAfterOfficeHours) return "After Hours";
+  return "Office Hours";
+}
+
+function actionBadgeTone(actionType) {
+  return actionType === "logout"
+    ? "border-cyber-accent/35 bg-cyber-accent/10 text-cyber-accent"
+    : "border-cyber-safe/35 bg-cyber-safe/10 text-cyber-safe";
+}
+
 export default function AdminMonitoringPage() {
   const [alerts, setAlerts] = useState([]);
   const [blockedAlerts, setBlockedAlerts] = useState([]);
@@ -52,16 +74,51 @@ export default function AdminMonitoringPage() {
   const [feed, setFeed] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [exfilIncidents, setExfilIncidents] = useState([]);
+  const [downloadRequests, setDownloadRequests] = useState([]);
+  const [sessionLogs, setSessionLogs] = useState([]);
+  const [sessionSummary, setSessionSummary] = useState({
+    total: 0,
+    logins: 0,
+    logouts: 0,
+    afterHours: 0,
+    weekends: 0
+  });
+  const [sessionPolicy, setSessionPolicy] = useState("09:00-18:00");
+  const [sessionFilters, setSessionFilters] = useState({
+    actionType: "all",
+    afterHours: "all",
+    department: "all",
+    employeeID: "",
+    from: "",
+    to: ""
+  });
   const [actionMessage, setActionMessage] = useState("");
   const [loadingAction, setLoadingAction] = useState("");
 
+  const buildSessionParams = () => {
+    const params = {
+      limit: 250
+    };
+
+    if (sessionFilters.actionType !== "all") params.actionType = sessionFilters.actionType;
+    if (sessionFilters.afterHours !== "all") params.afterHours = sessionFilters.afterHours;
+    if (sessionFilters.department !== "all") params.department = sessionFilters.department;
+    if (sessionFilters.employeeID.trim()) params.employeeID = sessionFilters.employeeID.trim().toUpperCase();
+    if (sessionFilters.from) params.from = sessionFilters.from;
+    if (sessionFilters.to) params.to = sessionFilters.to;
+
+    return params;
+  };
+
   const loadData = async () => {
-    const [alertBuckets, riskRows, liveFeed, employeeList, incidentRows] = await Promise.all([
+    const [alertBuckets, riskRows, liveFeed, employeeList, incidentRows, requestRows, sessionData] = await Promise.all([
       fetchAlertBuckets(false),
       fetchRiskTable(),
       fetchLiveFeed(),
       fetchEmployees(),
-      fetchExfiltrationIncidents({ limit: 80 })
+      fetchExfiltrationIncidents({ limit: 80 }),
+      fetchDocumentDownloadRequests({ limit: 100 }),
+      fetchSessionAuditLogs(buildSessionParams())
     ]);
     setAlerts(alertBuckets?.alerts || []);
     setBlockedAlerts(alertBuckets?.blockedAlerts || []);
@@ -76,6 +133,18 @@ export default function AdminMonitoringPage() {
     setFeed(liveFeed);
     setEmployees(employeeList);
     setExfilIncidents(incidentRows);
+    setDownloadRequests(requestRows);
+    setSessionLogs(sessionData?.rows || []);
+    setSessionSummary(
+      sessionData?.summary || {
+        total: 0,
+        logins: 0,
+        logouts: 0,
+        afterHours: 0,
+        weekends: 0
+      }
+    );
+    setSessionPolicy(sessionData?.officeHoursPolicy || "09:00-18:00");
   };
 
   useEffect(() => {
@@ -84,7 +153,7 @@ export default function AdminMonitoringPage() {
       loadData().catch(() => {});
     }, 20000);
     return () => clearInterval(interval);
-  }, []);
+  }, [sessionFilters]);
 
   const employeeStatusMap = useMemo(
     () =>
@@ -115,6 +184,16 @@ export default function AdminMonitoringPage() {
       }),
     [riskTable, employeeStatusMap]
   );
+
+  const actionableDownloadRequests = useMemo(
+    () => downloadRequests.filter((request) => ["pending_admin", "otp_sent", "expired"].includes(request.status)),
+    [downloadRequests]
+  );
+
+  const departmentOptions = useMemo(() => {
+    const departments = [...new Set(employees.map((item) => String(item.department || "").trim()).filter(Boolean))].sort();
+    return ["all", ...departments];
+  }, [employees]);
 
   const handleSendAlert = async (rowOrEmployeeID, contextLabel = "suspicious activity") => {
     const employeeID = normalizeEmployeeID(
@@ -234,6 +313,35 @@ export default function AdminMonitoringPage() {
     }
   };
 
+  const handleApproveDownloadRequest = async (request) => {
+    setActionMessage("");
+    setLoadingAction(`download-approve-${request.id}`);
+    try {
+      const response = await approveDocumentDownloadRequest(request.id);
+      const otp = response?.otpPreview ? ` OTP: ${response.otpPreview}` : "";
+      setActionMessage(`Approval sent for ${request.employeeID}.${otp}`);
+      await loadData();
+    } catch (error) {
+      setActionMessage(error?.response?.data?.message || "Unable to approve download request.");
+    } finally {
+      setLoadingAction("");
+    }
+  };
+
+  const handleRejectDownloadRequest = async (request) => {
+    setActionMessage("");
+    setLoadingAction(`download-reject-${request.id}`);
+    try {
+      await rejectDocumentDownloadRequest(request.id, "Request rejected by admin security policy.");
+      setActionMessage(`Rejected request ${request.requestID} for ${request.employeeID}.`);
+      await loadData();
+    } catch (error) {
+      setActionMessage(error?.response?.data?.message || "Unable to reject download request.");
+    } finally {
+      setLoadingAction("");
+    }
+  };
+
   return (
     <div className="grid gap-4 xl:grid-cols-[1.2fr,1fr]">
       <div className="space-y-4">
@@ -295,6 +403,91 @@ export default function AdminMonitoringPage() {
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="glass-panel cyber-scroll rounded-2xl border border-cyber-warn/25 bg-cyber-warn/5 p-4">
+          <h3 className="mb-3 font-display text-lg font-semibold text-slate-900">Restricted Download Approval Queue</h3>
+          <div className="max-h-[280px] overflow-auto">
+            <table className="cyber-table w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
+                <tr>
+                  <th className="pb-2">Request</th>
+                  <th className="pb-2">Employee</th>
+                  <th className="pb-2">Document</th>
+                  <th className="pb-2">Risk</th>
+                  <th className="pb-2">Status</th>
+                  <th className="pb-2">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {actionableDownloadRequests.map((request) => (
+                  <tr
+                    key={request.id}
+                    className={`border-t border-cyber-accent/10 ${
+                      Number(request.riskScore || 0) >= 0.7 ? "bg-cyber-threat/10" : "bg-cyber-warn/5"
+                    }`}
+                  >
+                    <td className="py-2 font-mono text-xs text-slate-300">{request.requestID}</td>
+                    <td className="py-2 text-slate-100">
+                      <p className="font-mono text-xs">{request.employeeID}</p>
+                      <p className="text-[11px] text-slate-400">{request.role}</p>
+                    </td>
+                    <td className="py-2 text-slate-200">
+                      <p>{request.documentName}</p>
+                      <p className="text-[11px] text-slate-400">{request.sensitivityLevel}</p>
+                    </td>
+                    <td className="py-2 font-semibold text-slate-100">{Number(request.riskScore || 0).toFixed(2)}</td>
+                    <td className="py-2">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-xs ${
+                          request.status === "pending_admin"
+                            ? "border-cyber-warn/45 bg-cyber-warn/10 text-cyber-warn"
+                            : request.status === "otp_sent"
+                              ? "border-cyber-accent/45 bg-cyber-accent/10 text-cyber-accent"
+                              : request.status === "approved"
+                                ? "border-cyber-safe/45 bg-cyber-safe/10 text-cyber-safe"
+                                : "border-cyber-threat/45 bg-cyber-threat/10 text-cyber-threat"
+                        }`}
+                      >
+                        {request.status.replace(/_/g, " ")}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      <div className="flex flex-wrap gap-1">
+                        <button
+                          onClick={() => handleApproveDownloadRequest(request)}
+                          disabled={
+                            !["pending_admin", "otp_sent", "expired"].includes(request.status) ||
+                            loadingAction === `download-approve-${request.id}`
+                          }
+                          className="rounded-lg border border-cyber-safe/35 bg-cyber-safe/10 px-2 py-1 text-xs text-cyber-safe disabled:opacity-60"
+                        >
+                          Approve + OTP
+                        </button>
+                        <button
+                          onClick={() => handleRejectDownloadRequest(request)}
+                          disabled={
+                            !["pending_admin", "otp_sent", "expired"].includes(request.status) ||
+                            loadingAction === `download-reject-${request.id}`
+                          }
+                          className="rounded-lg border border-cyber-threat/35 bg-cyber-threat/10 px-2 py-1 text-xs text-cyber-threat disabled:opacity-60"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {actionableDownloadRequests.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-4 text-center text-sm text-slate-400">
+                      No restricted download requests.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -542,6 +735,160 @@ export default function AdminMonitoringPage() {
                   <tr>
                     <td colSpan={5} className="py-4 text-center text-sm text-slate-400">
                       No blocked-user alerts.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="glass-panel cyber-scroll rounded-2xl border border-cyber-accent/20 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-display text-lg font-semibold text-slate-900">Session Audit Logs</h3>
+            <span className="rounded-full border border-cyber-accent/30 bg-cyber-base/55 px-2 py-0.5 text-xs text-slate-300">
+              Office Hours: {sessionPolicy}
+            </span>
+          </div>
+
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <select
+              value={sessionFilters.actionType}
+              onChange={(event) => setSessionFilters((prev) => ({ ...prev, actionType: event.target.value }))}
+              className="rounded-xl border border-cyber-accent/20 bg-cyber-base/60 px-2 py-1.5 text-xs text-slate-200"
+            >
+              <option value="all">All Actions</option>
+              <option value="login">Login</option>
+              <option value="logout">Logout</option>
+            </select>
+
+            <select
+              value={sessionFilters.afterHours}
+              onChange={(event) => setSessionFilters((prev) => ({ ...prev, afterHours: event.target.value }))}
+              className="rounded-xl border border-cyber-accent/20 bg-cyber-base/60 px-2 py-1.5 text-xs text-slate-200"
+            >
+              <option value="all">All Timing</option>
+              <option value="true">After Hours Only</option>
+              <option value="false">Office Hours Only</option>
+            </select>
+
+            <select
+              value={sessionFilters.department}
+              onChange={(event) => setSessionFilters((prev) => ({ ...prev, department: event.target.value }))}
+              className="rounded-xl border border-cyber-accent/20 bg-cyber-base/60 px-2 py-1.5 text-xs text-slate-200"
+            >
+              <option value="all">All Departments</option>
+              {departmentOptions
+                .filter((department) => department !== "all")
+                .map((department) => (
+                  <option key={department} value={department}>
+                    {department}
+                  </option>
+                ))}
+            </select>
+
+            <input
+              value={sessionFilters.employeeID}
+              onChange={(event) => setSessionFilters((prev) => ({ ...prev, employeeID: event.target.value }))}
+              placeholder="Employee ID"
+              className="rounded-xl border border-cyber-accent/20 bg-cyber-base/60 px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-500"
+            />
+
+            <button
+              onClick={() =>
+                setSessionFilters({
+                  actionType: "all",
+                  afterHours: "all",
+                  department: "all",
+                  employeeID: "",
+                  from: "",
+                  to: ""
+                })
+              }
+              className="rounded-xl border border-cyber-safe/35 bg-cyber-safe/10 px-2 py-1.5 text-xs text-cyber-safe"
+            >
+              Reset Filters
+            </button>
+          </div>
+
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="rounded-xl border border-cyber-accent/20 bg-cyber-base/60 px-2 py-1.5 text-xs text-slate-300">
+              From
+              <input
+                type="date"
+                value={sessionFilters.from}
+                onChange={(event) => setSessionFilters((prev) => ({ ...prev, from: event.target.value }))}
+                className="mt-1 block w-full rounded-lg border border-cyber-accent/15 bg-cyber-base/65 px-2 py-1 text-xs text-slate-200"
+              />
+            </label>
+            <label className="rounded-xl border border-cyber-accent/20 bg-cyber-base/60 px-2 py-1.5 text-xs text-slate-300">
+              To
+              <input
+                type="date"
+                value={sessionFilters.to}
+                onChange={(event) => setSessionFilters((prev) => ({ ...prev, to: event.target.value }))}
+                className="mt-1 block w-full rounded-lg border border-cyber-accent/15 bg-cyber-base/65 px-2 py-1 text-xs text-slate-200"
+              />
+            </label>
+            <div className="rounded-xl border border-cyber-accent/20 bg-cyber-base/60 px-2 py-1.5 text-xs text-slate-300">
+              <p>Total Sessions</p>
+              <p className="mt-1 text-sm font-semibold text-slate-100">{sessionSummary.total}</p>
+            </div>
+            <div className="rounded-xl border border-cyber-warn/25 bg-cyber-warn/10 px-2 py-1.5 text-xs text-cyber-warn">
+              <p>After-Hours / Weekend</p>
+              <p className="mt-1 text-sm font-semibold">
+                {sessionSummary.afterHours} / {sessionSummary.weekends}
+              </p>
+            </div>
+          </div>
+
+          <div className="max-h-[340px] overflow-auto">
+            <table className="cyber-table w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
+                <tr>
+                  <th className="pb-2">Time</th>
+                  <th className="pb-2">Employee</th>
+                  <th className="pb-2">Action</th>
+                  <th className="pb-2">Timing</th>
+                  <th className="pb-2">Department</th>
+                  <th className="pb-2">Session</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessionLogs.map((entry) => (
+                  <tr key={entry.id} className="border-t border-cyber-accent/10">
+                    <td className="py-2 text-xs text-slate-300">
+                      {new Date(entry.timestamp).toLocaleString()}
+                      {entry.localTimeLabel && <p className="text-[10px] text-slate-500">{entry.localTimeLabel}</p>}
+                    </td>
+                    <td className="py-2">
+                      <p className="font-mono text-xs text-slate-200">{entry.employeeID}</p>
+                      <p className="text-xs text-slate-400">
+                        {entry.employeeName} | {entry.role}
+                      </p>
+                    </td>
+                    <td className="py-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-xs ${actionBadgeTone(entry.actionType)}`}>
+                        {String(entry.actionType || "").toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-xs ${sessionTone(entry)}`}>
+                        {sessionLabel(entry)}
+                      </span>
+                    </td>
+                    <td className="py-2 text-slate-300">{entry.department}</td>
+                    <td className="py-2 text-xs text-slate-300">
+                      {entry.actionType === "logout" && Number.isFinite(entry.sessionDurationMinutes)
+                        ? `${entry.sessionDurationMinutes} min`
+                        : "-"}
+                    </td>
+                  </tr>
+                ))}
+                {sessionLogs.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-4 text-center text-sm text-slate-400">
+                      No session logs match selected filters.
                     </td>
                   </tr>
                 )}

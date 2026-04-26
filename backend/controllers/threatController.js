@@ -4,11 +4,19 @@ const Alert = require("../models/Alert");
 const AccessLog = require("../models/AccessLog");
 const DetectionResult = require("../models/DetectionResult");
 const ExfiltrationIncident = require("../models/ExfiltrationIncident");
+const DocumentDownloadRequest = require("../models/DocumentDownloadRequest");
 const User = require("../models/User");
 const UserActivity = require("../models/UserActivity");
-const { buildEmployeeRiskTable } = require("../services/riskEngine");
+const {
+  buildEmployeeRiskTable,
+  shouldForceLockByRisk,
+  enforceCriticalRiskLock
+} = require("../services/riskEngine");
 const { detectRoleMisuse, detectSpamEmail } = require("../services/mlService");
 const { createAlert } = require("../services/alertService");
+
+const OFFICE_HOURS_START = Number(process.env.OFFICE_HOURS_START || 9);
+const OFFICE_HOURS_END = Number(process.env.OFFICE_HOURS_END || 18);
 
 function classifyThreatLevel(score) {
   if (score >= 0.7) return "Red";
@@ -99,6 +107,35 @@ function isSensitiveResource(resourceValue) {
   return SENSITIVE_RESOURCE_KEYWORDS.some((token) => resource.includes(token));
 }
 
+function parseAccessTiming(rawTimestamp) {
+  const date = new Date(rawTimestamp || "");
+  const fallback = {
+    timestamp: String(rawTimestamp || ""),
+    hour: 12,
+    isWeekend: false,
+    isAfterOfficeHours: false,
+    workTiming: "office_hours"
+  };
+
+  if (Number.isNaN(date.getTime())) {
+    return fallback;
+  }
+
+  const hour = date.getHours();
+  const day = date.getDay();
+  const isWeekend = day === 0 || day === 6;
+  const isAfterOfficeHours = hour < OFFICE_HOURS_START || hour >= OFFICE_HOURS_END;
+  const workTiming = isWeekend ? "weekend" : isAfterOfficeHours ? "after_hours" : "office_hours";
+
+  return {
+    timestamp: date.toISOString(),
+    hour,
+    isWeekend,
+    isAfterOfficeHours,
+    workTiming
+  };
+}
+
 function getAllowedDomainsForRoleAndDepartment(roleValue, departmentValue) {
   const role = normalizeText(roleValue);
   const department = normalizeDepartment(departmentValue) || inferDepartmentFromRole(roleValue);
@@ -135,11 +172,18 @@ function roleMisuseHeuristicAdjust(rows, userContextByEmployeeID = new Map()) {
     const allowedDomains = getAllowedDomainsForRoleAndDepartment(evaluatedRole, evaluatedDepartment);
     const detectedDomains = inferResourceDomains(row.AccessedResource);
     const sensitiveResource = isSensitiveResource(row.AccessedResource);
+    const timing = parseAccessTiming(row.Timestamp);
+    const isAfterHoursSignal = Boolean(row.IsAfterOfficeHours || timing.isAfterOfficeHours);
+    const isWeekendSignal = Boolean(row.IsWeekend || timing.isWeekend);
+    const modelSignals = Array.isArray(row.SuspiciousSignals)
+      ? row.SuspiciousSignals.map((item) => String(item))
+      : [];
 
     const existingRisk = Math.max(0, Math.min(1, Number(row["Risk Score"] || 0)));
     let adjustedRisk = existingRisk;
     let adjustedStatus = row.Status || "Normal";
     let policyDecision = "model_only";
+    const suspiciousSignals = [...modelSignals];
 
     if (allowedDomains === null) {
       adjustedRisk = Math.min(existingRisk, sensitiveResource ? 0.45 : 0.25);
@@ -153,6 +197,7 @@ function roleMisuseHeuristicAdjust(rows, userContextByEmployeeID = new Map()) {
         adjustedRisk = Math.max(existingRisk, sensitiveResource ? 0.92 : 0.78);
         adjustedStatus = "Suspicious";
         policyDecision = "policy_violation";
+        suspiciousSignals.push("policy_violation");
       } else if (isAllowed) {
         adjustedRisk = Math.min(existingRisk, sensitiveResource ? 0.5 : 0.3);
         adjustedStatus = adjustedRisk >= 0.68 ? "Suspicious" : "Normal";
@@ -161,13 +206,41 @@ function roleMisuseHeuristicAdjust(rows, userContextByEmployeeID = new Map()) {
         adjustedRisk = Math.max(existingRisk, 0.66);
         adjustedStatus = "Suspicious";
         policyDecision = "sensitive_unknown_resource";
+        suspiciousSignals.push("sensitive_unknown_resource");
       } else {
         adjustedStatus = adjustedRisk >= 0.68 ? "Suspicious" : "Normal";
       }
     }
 
+    if (isAfterHoursSignal && allowedDomains !== null) {
+      adjustedRisk = Math.max(adjustedRisk, sensitiveResource ? 0.72 : 0.58);
+      if (sensitiveResource || adjustedRisk >= 0.55) {
+        adjustedStatus = "Suspicious";
+        policyDecision = policyDecision === "model_only" ? "after_hours_anomaly" : policyDecision;
+      }
+      suspiciousSignals.push("after_office_hours_access");
+    }
+
+    if (isWeekendSignal && allowedDomains !== null) {
+      adjustedRisk = Math.max(adjustedRisk, sensitiveResource ? 0.74 : 0.6);
+      if (adjustedRisk >= 0.56) {
+        adjustedStatus = "Suspicious";
+      }
+      suspiciousSignals.push("weekend_access");
+    }
+
+    if (!suspiciousSignals.length) {
+      suspiciousSignals.push("normal_pattern");
+    }
+
     return {
       ...row,
+      Timestamp: timing.timestamp || String(row.Timestamp || ""),
+      AccessHour: Number.isFinite(Number(row.AccessHour)) ? Number(row.AccessHour) : timing.hour,
+      IsAfterOfficeHours: isAfterHoursSignal,
+      IsWeekend: isWeekendSignal,
+      WorkTiming: row.WorkTiming || timing.workTiming,
+      SuspiciousSignals: [...new Set(suspiciousSignals)],
       "Risk Score": Number(adjustedRisk.toFixed(2)),
       Status: adjustedStatus,
       EvaluatedRole: evaluatedRole,
@@ -315,16 +388,19 @@ async function getOverview(req, res) {
     emailDetections,
     emailScans,
     riskTable,
-    exfiltrationAttempts
+    exfiltrationAttempts,
+    pendingDownloadApprovals
   ] = await Promise.all([
     Alert.countDocuments({
       employeeID: { $in: activeEmployeeIDs },
+      type: { $ne: "USB Exfiltration" },
       status: "open",
       "metadata.manual": { $ne: true },
       "metadata.action": { $nin: ["block", "unblock"] }
     }),
     Alert.countDocuments({
       employeeID: { $in: blockedEmployeeIDs },
+      type: { $ne: "USB Exfiltration" },
       status: { $ne: "closed" }
     }),
     DetectionResult.countDocuments({
@@ -342,7 +418,8 @@ async function getOverview(req, res) {
       createdBy: { $in: [...activeEmployeeIDs, ...blockedEmployeeIDs] }
     }),
     buildEmployeeRiskTable(),
-    ExfiltrationIncident.countDocuments({ employeeID: { $in: activeEmployeeIDs }, riskScore: { $gte: 0.65 } })
+    ExfiltrationIncident.countDocuments({ employeeID: { $in: activeEmployeeIDs }, riskScore: { $gte: 0.65 } }),
+    DocumentDownloadRequest.countDocuments({ status: { $in: ["pending_admin", "otp_sent"] } })
   ]);
 
   const activeRiskRows = riskTable.filter((item) => item.accountStatus !== "Blocked");
@@ -368,6 +445,7 @@ async function getOverview(req, res) {
     spamEmailsDetected,
     emailScans,
     dataExfiltrationAttempts: exfiltrationAttempts,
+    pendingDownloadApprovals,
     systemOverallRiskScore: Number(avgRisk.toFixed(2)),
     activeRiskEmployees: activeRiskRows.length,
     blockedRiskEmployees: blockedRiskRows.length,
@@ -435,7 +513,8 @@ async function getFilteredAlerts(req, res) {
     scope === "blocked" ? blockedEmployeeIDs : scope === "all" ? [...activeEmployeeIDs, ...blockedEmployeeIDs] : activeEmployeeIDs;
 
   const query = {
-    employeeID: { $in: employeeIDs }
+    employeeID: { $in: employeeIDs },
+    type: { $ne: "USB Exfiltration" }
   };
   if (String(includeClosed).toLowerCase() !== "true" && !status) {
     query.status = { $ne: "closed" };
@@ -481,7 +560,11 @@ async function getTimelineAnalytics(req, res) {
   const employeeIDs = await getActiveEmployeeIDs();
 
   const [alerts, emailDetections, riskTable] = await Promise.all([
-    Alert.find({ employeeID: { $in: employeeIDs }, createdAt: { $gte: startDate } }).select("severity createdAt"),
+    Alert.find({
+      employeeID: { $in: employeeIDs },
+      type: { $ne: "USB Exfiltration" },
+      createdAt: { $gte: startDate }
+    }).select("severity createdAt"),
     DetectionResult.find({
       type: "Email",
       createdBy: { $in: employeeIDs },
@@ -544,7 +627,9 @@ async function getLiveFeed(req, res) {
 
   const [logs, alerts] = await Promise.all([
     AccessLog.find({ employeeID: { $in: employeeIDs } }).sort({ timestamp: -1 }).limit(25),
-    Alert.find({ employeeID: { $in: employeeIDs } }).sort({ createdAt: -1 }).limit(25)
+    Alert.find({ employeeID: { $in: employeeIDs }, type: { $ne: "USB Exfiltration" } })
+      .sort({ createdAt: -1 })
+      .limit(25)
   ]);
 
   const feed = [
@@ -577,8 +662,12 @@ async function getAlerts(req, res) {
   const statusFilter = includeClosed ? {} : { status: { $ne: "closed" } };
 
   const [alerts, blockedAlerts] = await Promise.all([
-    Alert.find({ employeeID: { $in: activeEmployeeIDs }, ...statusFilter }).sort({ createdAt: -1 }).limit(150),
-    Alert.find({ employeeID: { $in: blockedEmployeeIDs }, ...statusFilter }).sort({ createdAt: -1 }).limit(150)
+    Alert.find({ employeeID: { $in: activeEmployeeIDs }, type: { $ne: "USB Exfiltration" }, ...statusFilter })
+      .sort({ createdAt: -1 })
+      .limit(150),
+    Alert.find({ employeeID: { $in: blockedEmployeeIDs }, type: { $ne: "USB Exfiltration" }, ...statusFilter })
+      .sort({ createdAt: -1 })
+      .limit(150)
   ]);
 
   return res.json({
@@ -644,6 +733,7 @@ async function resolveAlerts(req, res) {
   const updateResult = await Alert.updateMany(
     {
       employeeID: { $in: targetEmployeeIDs },
+      type: { $ne: "USB Exfiltration" },
       status: { $ne: "closed" }
     },
     {
@@ -703,10 +793,24 @@ async function scanEmail(req, res) {
     });
   }
 
+  let lockResult = null;
+  if (["Spam", "Phishing"].includes(mlResult.prediction) && shouldForceLockByRisk(riskScore)) {
+    lockResult = await enforceCriticalRiskLock({
+      employeeID: req.user.employeeID,
+      riskScore,
+      reason: `Critical ${mlResult.prediction.toLowerCase()} email risk detected during scan.`,
+      source: "email-security-scan",
+      metadata: {
+        prediction: mlResult.prediction
+      }
+    });
+  }
+
   return res.json({
     prediction: mlResult.prediction || "Safe",
     confidenceScore: Number(riskScore.toFixed(2)),
-    suspiciousKeywords: mlResult.suspicious_keywords || []
+    suspiciousKeywords: mlResult.suspicious_keywords || [],
+    sessionTerminated: Boolean(lockResult?.locked)
   });
 }
 
@@ -733,6 +837,7 @@ async function runRoleMisusePipeline({ req, records, sourceName, activityMetadat
   analyzedRows = roleMisuseHeuristicAdjust(analyzedRows, userContextByEmployeeID);
 
   const suspiciousRows = analyzedRows.filter((row) => row.Status === "Suspicious");
+  const afterHoursRows = analyzedRows.filter((row) => row.IsAfterOfficeHours || row.IsWeekend);
   const avgRisk =
     analyzedRows.length > 0
       ? analyzedRows.reduce((sum, row) => sum + Number(row["Risk Score"] || 0), 0) / analyzedRows.length
@@ -804,11 +909,25 @@ async function runRoleMisusePipeline({ req, records, sourceName, activityMetadat
         sampleRows: group.rows.slice(0, 5)
       }
     });
+
+    if (shouldForceLockByRisk(Number(group.maxRisk || 0))) {
+      await enforceCriticalRiskLock({
+        employeeID: group.employeeID,
+        riskScore: Number(group.maxRisk || 0),
+        reason: "Critical role misuse anomaly threshold exceeded.",
+        source: "role-misuse-pipeline",
+        metadata: {
+          suspiciousEvents: group.rows.length,
+          topResources
+        }
+      });
+    }
   }
 
   return {
     totalRecords: analyzedRows.length,
     suspiciousRecords: suspiciousRows.length,
+    afterHoursRecords: afterHoursRows.length,
     output: analyzedRows
   };
 }

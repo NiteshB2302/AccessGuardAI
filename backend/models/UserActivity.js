@@ -19,6 +19,7 @@ const userActivitySchema = new mongoose.Schema(
       type: String,
       enum: [
         "login",
+        "logout",
         "view",
         "download",
         "upload",

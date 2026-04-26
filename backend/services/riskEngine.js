@@ -4,6 +4,8 @@ const UserActivity = require("../models/UserActivity");
 const Alert = require("../models/Alert");
 const { getSensitivityRisk } = require("./permissionService");
 
+const CRITICAL_RISK_THRESHOLD = Number(process.env.CRITICAL_RISK_THRESHOLD || 0.85);
+
 function clampRisk(value) {
   return Math.max(0, Math.min(1, value));
 }
@@ -12,6 +14,10 @@ function threatLevel(score) {
   if (score >= 0.7) return "High";
   if (score >= 0.4) return "Warning";
   return "Safe";
+}
+
+function shouldForceLockByRisk(score) {
+  return clampRisk(Number(score || 0)) >= CRITICAL_RISK_THRESHOLD;
 }
 
 function computeBehaviorRisk(logs = [], activities = [], alerts = []) {
@@ -57,7 +63,7 @@ function computeBehaviorRisk(logs = [], activities = [], alerts = []) {
     sensitiveRatio * 0.08 +
     highAlertRatio * 0.08 +
     avgAlertRisk * 0.17 +
-    dataExfilRatio * 0.22;
+    dataExfilRatio * 0.18;
 
   // Once alerts are resolved, keep historical behavior visible but below warning threshold.
   // This prevents stale warning badges from persisting after analyst resolution.
@@ -66,6 +72,78 @@ function computeBehaviorRisk(logs = [], activities = [], alerts = []) {
   }
 
   return clampRisk(risk);
+}
+
+async function enforceCriticalRiskLock({
+  employeeID,
+  riskScore,
+  reason = "Automatic security lock due to critical risk score.",
+  source = "risk-engine",
+  metadata = {}
+}) {
+  const normalizedEmployeeID = String(employeeID || "").trim();
+  if (!normalizedEmployeeID) {
+    return { locked: false, reason: "INVALID_EMPLOYEE_ID" };
+  }
+
+  const user = await User.findOne({ employeeID: normalizedEmployeeID });
+  if (!user) {
+    return { locked: false, reason: "USER_NOT_FOUND" };
+  }
+
+  if (user.role === "Admin") {
+    return { locked: false, reason: "ADMIN_EXEMPT" };
+  }
+
+  const normalizedRisk = clampRisk(Number(riskScore || 0));
+  const alreadyBlocked = user.accountStatus === "Blocked";
+  const blockedAt = new Date();
+
+  user.accountStatus = "Blocked";
+  user.blockedReason = reason;
+  user.blockedAt = blockedAt;
+  user.blockedBy = "SYSTEM_AUTO_LOCK";
+  user.sessionInvalidatedAt = blockedAt;
+  user.tokenVersion = Number(user.tokenVersion || 0) + 1;
+  await user.save();
+
+  await UserActivity.create({
+    employeeID: user.employeeID,
+    actionType: "account_block",
+    timestamp: blockedAt,
+    department: user.department,
+    metadata: {
+      autoLock: true,
+      source,
+      riskScore: Number(normalizedRisk.toFixed(2)),
+      reason,
+      ...metadata
+    }
+  });
+
+  await Alert.create({
+    type: "Behavior Anomaly",
+    severity: "high",
+    message: `Automatic account lock triggered for ${user.employeeID}. Reason: ${reason}`,
+    employeeID: user.employeeID,
+    riskScore: Number(normalizedRisk.toFixed(2)),
+    metadata: {
+      autoLock: true,
+      source,
+      criticalThreshold: CRITICAL_RISK_THRESHOLD,
+      alreadyBlocked,
+      ...metadata
+    }
+  });
+
+  return {
+    locked: true,
+    alreadyBlocked,
+    employeeID: user.employeeID,
+    tokenVersion: user.tokenVersion,
+    blockedAt,
+    blockedReason: reason
+  };
 }
 
 function isAdminControlActivity(activity = {}) {
@@ -123,11 +201,14 @@ async function buildEmployeeRiskTable() {
 }
 
 module.exports = {
+  CRITICAL_RISK_THRESHOLD,
+  shouldForceLockByRisk,
   threatLevel,
   insiderThreatRisk,
   isAdminControlAlert,
   isAdminControlActivity,
   filterRiskSignals,
   computeBehaviorRisk,
+  enforceCriticalRiskLock,
   buildEmployeeRiskTable
 };

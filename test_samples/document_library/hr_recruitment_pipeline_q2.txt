@@ -1,0 +1,20 @@
+Recruitment Pipeline Tracker - Q2 FY2026
+
+Owner: Talent Acquisition
+Classification: Internal
+
+Headcount Plan
+- Engineering: 12 openings
+- Product: 4 openings
+- Finance: 3 openings
+- Security Operations: 2 openings
+
+Hiring Funnel Metrics
+- Applications screened: 624
+- Technical rounds completed: 188
+- Offers released: 31
+- Offer acceptance rate: 74%
+
+Process Updates
+- Background check SLA reduced from 7 days to 4 days.
+- New interview scorecard mandated for all managerial positions.

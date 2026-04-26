@@ -5,6 +5,11 @@ export async function loginUser(email, password) {
   return data;
 }
 
+export async function logoutUser() {
+  const { data } = await api.post("/auth/logout");
+  return data;
+}
+
 export async function bootstrapAdmin(payload = {}) {
   const { data } = await api.post("/auth/bootstrap-admin", payload);
   return data;
@@ -14,4 +19,3 @@ export async function getCurrentUser() {
   const { data } = await api.get("/auth/me");
   return data.user;
 }
-

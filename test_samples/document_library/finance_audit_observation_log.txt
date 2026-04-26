@@ -1,0 +1,22 @@
+Internal Audit Observation Log - Finance Controls
+
+Document Owner: Finance Controls Team
+Classification: Internal
+
+Observation A-14
+- Finding: Delayed reconciliation for three vendor ledgers.
+- Impact: Medium
+- Remediation Owner: AP Operations Lead
+- Due Date: 2026-05-12
+
+Observation B-03
+- Finding: Manual journal entries missing dual sign-off in 4 out of 80 samples.
+- Impact: High
+- Remediation Owner: Financial Controller
+- Due Date: 2026-04-30
+
+Observation C-11
+- Finding: Policy document not updated for revised travel reimbursement limits.
+- Impact: Low
+- Remediation Owner: HR Finance Partner
+- Due Date: 2026-05-03

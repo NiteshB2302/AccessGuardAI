@@ -36,6 +36,14 @@ const userSchema = new mongoose.Schema(
       enum: ["Active", "Blocked"],
       default: "Active"
     },
+    tokenVersion: {
+      type: Number,
+      default: 0
+    },
+    sessionInvalidatedAt: {
+      type: Date,
+      default: null
+    },
     blockedReason: {
       type: String,
       default: null

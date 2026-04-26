@@ -1,0 +1,20 @@
+Platform Architecture Change Log - Release Train 26.4
+
+Owner: Engineering Architecture Group
+Classification: Internal
+
+Change 01
+- Migrated authentication service cache layer to Redis cluster mode.
+- Expected outcome: 22% lower median token validation latency.
+
+Change 02
+- Introduced document checksum verification before secured download dispatch.
+- Expected outcome: lower tampering risk and better incident traceability.
+
+Change 03
+- Added API gateway rate limits for privileged admin endpoints.
+- Expected outcome: reduced brute-force and abuse surface.
+
+Open Risks
+- Legacy report generator still uses deprecated dependency.
+- Production failover drill pending for AP-South region.

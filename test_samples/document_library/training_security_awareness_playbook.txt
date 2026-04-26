@@ -1,0 +1,18 @@
+Security Awareness Playbook - New Employee Training
+
+Owner: Security Awareness Program
+Classification: Public
+
+Core Modules
+- Password and MFA hygiene
+- Recognizing phishing and social engineering
+- Secure handling of confidential documents
+- Reporting suspicious activity in Access Guard AI
+
+Completion Standard
+- Minimum assessment score: 80%
+- Refresher cadence: every 6 months
+
+Escalation Hotline
+- Security Desk: ext. 7401
+- Incident mailbox: security.incidents@company.local
