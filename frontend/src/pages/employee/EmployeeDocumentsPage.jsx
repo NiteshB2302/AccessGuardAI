@@ -28,6 +28,13 @@ function requestStatusTone(status) {
   return "border-cyber-threat/45 bg-cyber-threat/10 text-cyber-threat";
 }
 
+function statusBannerTone(type) {
+  if (type === "success") return "border-cyber-safe/40 bg-cyber-safe/10 text-cyber-safe";
+  if (type === "warning") return "border-cyber-warn/40 bg-cyber-warn/10 text-cyber-warn";
+  if (type === "error") return "border-cyber-threat/40 bg-cyber-threat/10 text-cyber-threat";
+  return "border-cyber-accent/30 bg-cyber-accent/10 text-cyber-accent";
+}
+
 function downloadTextFile(fileName, content) {
   const blob = new Blob([content || ""], { type: "text/plain;charset=utf-8" });
   const link = document.createElement("a");
@@ -45,6 +52,7 @@ export default function EmployeeDocumentsPage() {
   const [documents, setDocuments] = useState([]);
   const [requestHistory, setRequestHistory] = useState([]);
   const [statusMessage, setStatusMessage] = useState("");
+  const [statusType, setStatusType] = useState("info");
   const [search, setSearch] = useState("");
   const [level, setLevel] = useState("All");
   const [loadingAction, setLoadingAction] = useState("");
@@ -53,14 +61,19 @@ export default function EmployeeDocumentsPage() {
   const [otpPrompt, setOtpPrompt] = useState(null);
   const [otpValue, setOtpValue] = useState("");
   const [requestReason, setRequestReason] = useState("");
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [form, setForm] = useState({
     name: "",
     sensitivityLevel: "Internal",
     department: user?.department || "",
     content: "",
-    tags: "",
     file: null
   });
+
+  const updateStatus = (message, type = "info") => {
+    setStatusMessage(message);
+    setStatusType(type);
+  };
 
   const loadData = async () => {
     const [docs, requests] = await Promise.all([fetchDocuments(), fetchMyDocumentRequests(20)]);
@@ -94,17 +107,18 @@ export default function EmployeeDocumentsPage() {
   );
 
   const handleDocumentAction = async (document, action) => {
-    setStatusMessage("");
+    updateStatus("", "info");
     setLoadingAction(`${action}-${document.documentID}`);
     try {
       const data = await accessDocument(document.documentID, action);
       if (action === "view") {
         setViewDoc(data?.document || null);
-        setStatusMessage(data?.message || "Document opened.");
+        updateStatus(data?.message || "Document opened.", "success");
       } else {
         downloadTextFile(data?.document?.name, data?.document?.content);
-        setStatusMessage(
-          `Downloaded ${data?.document?.name}. Risk score ${Number(data?.audit?.riskScore || 0).toFixed(2)}.`
+        updateStatus(
+          `Downloaded ${data?.document?.name}. Risk score ${Number(data?.audit?.riskScore || 0).toFixed(2)}.`,
+          "success"
         );
       }
       setRestrictedPrompt(null);
@@ -118,7 +132,7 @@ export default function EmployeeDocumentsPage() {
           alert: payload.alert || null
         });
       } else {
-        setStatusMessage(payload?.message || "Document action failed.");
+        updateStatus(payload?.message || "Document action failed.", "error");
       }
       await loadData();
     } finally {
@@ -132,7 +146,7 @@ export default function EmployeeDocumentsPage() {
     try {
       const response = await requestDocumentDownload(restrictedPrompt.document.documentID, requestReason);
       const request = response?.request;
-      setStatusMessage(response?.message || "Request submitted.");
+      updateStatus(response?.message || "Request submitted.", "warning");
       setRestrictedPrompt(null);
       setRequestReason("");
       setOtpPrompt({
@@ -142,7 +156,7 @@ export default function EmployeeDocumentsPage() {
       });
       await loadData();
     } catch (error) {
-      setStatusMessage(error?.response?.data?.message || "Unable to submit admin request.");
+      updateStatus(error?.response?.data?.message || "Unable to submit admin request.", "error");
     } finally {
       setLoadingAction("");
     }
@@ -150,19 +164,19 @@ export default function EmployeeDocumentsPage() {
 
   const handleVerifyOtp = async () => {
     if (!otpPrompt?.requestRef || !otpValue.trim()) {
-      setStatusMessage("Enter OTP from notifications.");
+      updateStatus("Enter OTP from notifications.", "warning");
       return;
     }
     setLoadingAction(`otp-${otpPrompt.requestRef}`);
     try {
       const response = await verifyDocumentDownloadOtp(otpPrompt.requestRef, otpValue.trim());
       downloadTextFile(response?.document?.name, response?.document?.content);
-      setStatusMessage(`OTP verified. Download started for ${response?.document?.name}.`);
+      updateStatus(`OTP verified. Download started for ${response?.document?.name}.`, "success");
       setOtpPrompt(null);
       setOtpValue("");
       await loadData();
     } catch (error) {
-      setStatusMessage(error?.response?.data?.message || "OTP verification failed.");
+      updateStatus(error?.response?.data?.message || "OTP verification failed.", "error");
     } finally {
       setLoadingAction("");
     }
@@ -171,34 +185,36 @@ export default function EmployeeDocumentsPage() {
   const handleCreateDocument = async (event) => {
     event.preventDefault();
     setLoadingAction("create-document");
-    setStatusMessage("");
+    updateStatus("", "info");
     try {
       const response = await createDocument({
         name: form.name,
         department: form.department,
         sensitivityLevel: form.sensitivityLevel,
         content: form.content,
-        tags: form.tags,
         file: form.file
       });
+      const riskLevel = String(response?.scan?.riskLevel || "LOW").toUpperCase();
       const scanSummary = response?.scan
         ? ` Scan: ${response.scan.riskLevel} (${Number(response.scan.riskScore || 0).toFixed(2)}).`
         : "";
-      setStatusMessage(`${response?.message || "Document added."}${scanSummary}`);
+      const tone = riskLevel === "HIGH" ? "warning" : riskLevel === "MEDIUM" ? "warning" : "success";
+      updateStatus(`${response?.message || "Document added."}${scanSummary}`, tone);
       setForm((prev) => ({
         ...prev,
         name: "",
         content: "",
-        tags: "",
         file: null
       }));
+      setFileInputKey((prev) => prev + 1);
       await loadData();
     } catch (error) {
       const payload = error?.response?.data || {};
       const scanSummary = payload?.scan
         ? ` Scan: ${payload.scan.riskLevel} (${Number(payload.scan.riskScore || 0).toFixed(2)}).`
         : "";
-      setStatusMessage(`${payload?.message || "Unable to add document."}${scanSummary}`);
+      const isWarning = Boolean(payload?.warning) || String(payload?.scan?.riskLevel || "").toUpperCase() === "HIGH";
+      updateStatus(`${payload?.message || "Unable to add document."}${scanSummary}`, isWarning ? "warning" : "error");
     } finally {
       setLoadingAction("");
     }
@@ -206,6 +222,79 @@ export default function EmployeeDocumentsPage() {
 
   return (
     <div className="space-y-4">
+      <form onSubmit={handleCreateDocument} className="rounded-2xl border border-cyber-safe/25 bg-cyber-safe/5 p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <UploadCloud className="h-4 w-4 text-cyber-safe" />
+          <h3 className="font-display text-lg font-semibold text-slate-900">Add New Document</h3>
+        </div>
+        <p className="mb-3 text-xs text-slate-400">
+          Upload a TXT/PDF/DOCX file or paste real content to create role-aware documents.
+        </p>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          <input
+            value={form.name}
+            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+            className="rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyber-accent"
+            placeholder="Document name"
+          />
+          <input
+            value={form.department}
+            disabled={user?.role === "Employee"}
+            onChange={(e) => setForm((prev) => ({ ...prev, department: e.target.value }))}
+            className="rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyber-accent disabled:opacity-60"
+            placeholder="Department"
+          />
+        </div>
+
+        <div className="mt-2">
+          <select
+            value={form.sensitivityLevel}
+            onChange={(e) => setForm((prev) => ({ ...prev, sensitivityLevel: e.target.value }))}
+            className="rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyber-accent"
+          >
+            {SENSITIVITY_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <p className="mt-2 rounded-xl border border-cyber-accent/20 bg-cyber-base/45 px-3 py-2 text-xs text-slate-300">
+            Tags are auto-detected from file name, department, sensitivity, content keywords, and AI risk signals.
+          </p>
+        </div>
+
+        <textarea
+          value={form.content}
+          onChange={(e) => setForm((prev) => ({ ...prev, content: e.target.value }))}
+          placeholder="Paste document content here (optional if uploading file)."
+          className="mt-2 min-h-[110px] w-full rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyber-accent"
+        />
+
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            key={fileInputKey}
+            type="file"
+            accept=".txt,.pdf,.docx"
+            onChange={(e) => setForm((prev) => ({ ...prev, file: e.target.files?.[0] || null }))}
+            className="rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-xs text-slate-300"
+          />
+          <button
+            type="submit"
+            disabled={loadingAction === "create-document"}
+            className="rounded-xl border border-cyber-safe/45 bg-cyber-safe/10 px-3 py-2 text-sm font-medium text-cyber-safe disabled:opacity-60"
+          >
+            {loadingAction === "create-document" ? "Adding..." : "Add Document"}
+          </button>
+        </div>
+      </form>
+
+      {statusMessage && (
+        <p className={`rounded-lg border px-3 py-2 text-sm ${statusBannerTone(statusType)}`}>
+          {statusMessage}
+        </p>
+      )}
+
       <div className="rounded-2xl border border-cyber-accent/25 bg-cyber-base/55 p-4">
         <h2 className="font-display text-xl font-semibold text-slate-900">Document Portal</h2>
         <p className="mt-1 text-sm text-slate-400">
@@ -240,104 +329,27 @@ export default function EmployeeDocumentsPage() {
         </div>
       </div>
 
-      {statusMessage && (
-        <p className="rounded-lg border border-cyber-accent/30 bg-cyber-accent/10 px-3 py-2 text-sm text-cyber-accent">
-          {statusMessage}
-        </p>
-      )}
-
-      <div className="grid gap-4 xl:grid-cols-[1.2fr,1fr]">
-        <form onSubmit={handleCreateDocument} className="rounded-2xl border border-cyber-safe/25 bg-cyber-safe/5 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <UploadCloud className="h-4 w-4 text-cyber-safe" />
-            <h3 className="font-display text-lg font-semibold text-slate-900">Add New Document</h3>
-          </div>
-          <p className="mb-3 text-xs text-slate-400">
-            Upload a TXT/PDF/DOCX file or paste real content to create role-aware documents.
-          </p>
-
-          <div className="grid gap-2 md:grid-cols-2">
-            <input
-              value={form.name}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-              className="rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyber-accent"
-              placeholder="Document name"
-            />
-            <input
-              value={form.department}
-              disabled={user?.role === "Employee"}
-              onChange={(e) => setForm((prev) => ({ ...prev, department: e.target.value }))}
-              className="rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyber-accent disabled:opacity-60"
-              placeholder="Department"
-            />
-          </div>
-
-          <div className="mt-2 grid gap-2 md:grid-cols-2">
-            <select
-              value={form.sensitivityLevel}
-              onChange={(e) => setForm((prev) => ({ ...prev, sensitivityLevel: e.target.value }))}
-              className="rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyber-accent"
-            >
-              {SENSITIVITY_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            <input
-              value={form.tags}
-              onChange={(e) => setForm((prev) => ({ ...prev, tags: e.target.value }))}
-              className="rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyber-accent"
-              placeholder="Tags (comma separated)"
-            />
-          </div>
-
-          <textarea
-            value={form.content}
-            onChange={(e) => setForm((prev) => ({ ...prev, content: e.target.value }))}
-            placeholder="Paste document content here (optional if uploading file)."
-            className="mt-2 min-h-[110px] w-full rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyber-accent"
-          />
-
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <input
-              type="file"
-              accept=".txt,.pdf,.docx"
-              onChange={(e) => setForm((prev) => ({ ...prev, file: e.target.files?.[0] || null }))}
-              className="rounded-xl border border-cyber-accent/25 bg-cyber-panelSoft/35 px-3 py-2 text-xs text-slate-300"
-            />
-            <button
-              type="submit"
-              disabled={loadingAction === "create-document"}
-              className="rounded-xl border border-cyber-safe/45 bg-cyber-safe/10 px-3 py-2 text-sm font-medium text-cyber-safe disabled:opacity-60"
-            >
-              {loadingAction === "create-document" ? "Adding..." : "Add Document"}
-            </button>
-          </div>
-        </form>
-
-        <div className="rounded-2xl border border-cyber-accent/20 bg-cyber-base/50 p-4">
-          <h3 className="mb-2 font-display text-lg font-semibold text-slate-900">Recent Download Requests</h3>
-          <div className="max-h-[260px] space-y-2 overflow-auto pr-1">
-            {requestHistory.map((request) => (
-              <div key={request.id} className="rounded-xl border border-cyber-accent/20 bg-cyber-panelSoft/30 p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-slate-100">{request.documentName}</p>
-                  <span className={`rounded-full border px-2 py-0.5 text-[11px] ${requestStatusTone(request.status)}`}>
-                    {request.status.replace(/_/g, " ")}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  {request.requestID} | Risk {Number(request.riskScore || 0).toFixed(2)}
-                </p>
+      <div className="rounded-2xl border border-cyber-accent/20 bg-cyber-base/50 p-4">
+        <h3 className="mb-2 font-display text-lg font-semibold text-slate-900">Recent Download Requests</h3>
+        <div className="max-h-[260px] space-y-2 overflow-auto pr-1">
+          {requestHistory.map((request) => (
+            <div key={request.id} className="rounded-xl border border-cyber-accent/20 bg-cyber-panelSoft/30 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-slate-100">{request.documentName}</p>
+                <span className={`rounded-full border px-2 py-0.5 text-[11px] ${requestStatusTone(request.status)}`}>
+                  {request.status.replace(/_/g, " ")}
+                </span>
               </div>
-            ))}
-            {requestHistory.length === 0 && (
-              <p className="rounded-xl border border-cyber-accent/15 bg-cyber-panelSoft/20 px-3 py-4 text-sm text-slate-400">
-                No restricted download requests yet.
+              <p className="mt-1 text-xs text-slate-400">
+                {request.requestID} | Risk {Number(request.riskScore || 0).toFixed(2)}
               </p>
-            )}
-          </div>
+            </div>
+          ))}
+          {requestHistory.length === 0 && (
+            <p className="rounded-xl border border-cyber-accent/15 bg-cyber-panelSoft/20 px-3 py-4 text-sm text-slate-400">
+              No restricted download requests yet.
+            </p>
+          )}
         </div>
       </div>
 
@@ -379,6 +391,18 @@ export default function EmployeeDocumentsPage() {
             </div>
 
             <p className="mb-3 line-clamp-2 text-xs text-slate-400">{document.contentPreview}</p>
+            {Array.isArray(document.tags) && document.tags.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-1">
+                {document.tags.slice(0, 4).map((tag) => (
+                  <span
+                    key={`${document.documentID}-${tag}`}
+                    className="rounded-full border border-cyber-accent/30 bg-cyber-accent/10 px-2 py-0.5 text-[10px] text-cyber-accent"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
 
             <div className="flex gap-2">
               <button

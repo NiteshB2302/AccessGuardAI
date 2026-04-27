@@ -89,7 +89,6 @@ export async function createDocument(payload) {
   if (payload.department) form.append("department", payload.department);
   if (payload.sensitivityLevel) form.append("sensitivityLevel", payload.sensitivityLevel);
   if (payload.content) form.append("content", payload.content);
-  if (payload.tags) form.append("tags", payload.tags);
   const { data } = await api.post("/documents/create", form);
   return data;
 }

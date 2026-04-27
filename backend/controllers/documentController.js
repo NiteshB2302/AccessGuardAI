@@ -16,6 +16,15 @@ const { ensureDefaultDocuments } = require("../services/defaultDocumentService")
 
 const DOWNLOAD_REQUEST_STATUSES = ["pending_admin", "otp_sent", "approved", "rejected", "cancelled", "expired"];
 const OTP_TTL_MINUTES = Number(process.env.DOCUMENT_APPROVAL_OTP_TTL_MINUTES || 10);
+const AUTO_TAG_RULES = [
+  { tag: "finance", tokens: ["finance", "budget", "invoice", "audit", "ledger", "payroll", "expense"] },
+  { tag: "hr", tokens: ["hr", "employee", "recruit", "hiring", "benefit", "compensation", "salary"] },
+  { tag: "engineering", tokens: ["engineering", "architecture", "api", "code", "repository", "deploy"] },
+  { tag: "operations", tokens: ["operations", "runbook", "incident", "disaster", "continuity"] },
+  { tag: "product", tokens: ["product", "roadmap", "launch", "strategy", "milestone"] },
+  { tag: "training", tokens: ["training", "awareness", "onboarding", "guide", "workbook"] },
+  { tag: "security", tokens: ["security", "credentials", "password", "private key", "mfa", "threat"] }
+];
 
 function normalizeAction(input) {
   return String(input || "view").trim().toLowerCase() === "download" ? "download" : "view";
@@ -44,6 +53,86 @@ function summarizeContent(content, maxLength = 180) {
   if (!text) return "No preview available.";
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength).trim()}...`;
+}
+
+function normalizeTagToken(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
+
+function uniqueTags(values) {
+  const seen = new Set();
+  const tags = [];
+  for (const value of values) {
+    const token = normalizeTagToken(value);
+    if (!token || seen.has(token)) continue;
+    seen.add(token);
+    tags.push(token);
+  }
+  return tags;
+}
+
+function inferDocumentTags({ documentName, content, department, sensitivityLevel, mlResult, riskScore }) {
+  const source = `${documentName || ""} ${content || ""}`.toLowerCase();
+  const tags = [];
+  const normalizedDepartment = normalizeDepartment(department || "");
+  const suspiciousKeywords = Array.isArray(mlResult?.suspicious_keywords) ? mlResult.suspicious_keywords : [];
+
+  if (normalizedDepartment) {
+    tags.push(normalizedDepartment);
+  }
+  tags.push(sensitivityLevel || "Internal");
+
+  for (const rule of AUTO_TAG_RULES) {
+    if (rule.tokens.some((token) => source.includes(token))) {
+      tags.push(rule.tag);
+    }
+  }
+
+  suspiciousKeywords.slice(0, 5).forEach((keyword) => tags.push(keyword));
+
+  if (Number(riskScore || 0) >= 0.75) tags.push("high-risk");
+  else if (Number(riskScore || 0) >= 0.45) tags.push("medium-risk");
+  else tags.push("low-risk");
+
+  return uniqueTags(tags).slice(0, 8);
+}
+
+function evaluateDocumentThreat({ riskLevel, riskScore, suspiciousKeywords, suspiciousSentences, content }) {
+  const normalizedLevel = String(riskLevel || "LOW").toUpperCase();
+  const score = Number(riskScore || 0);
+  const keywords = Array.isArray(suspiciousKeywords) ? suspiciousKeywords.map((item) => String(item).toLowerCase()) : [];
+  const sentences = Array.isArray(suspiciousSentences) ? suspiciousSentences : [];
+  const text = String(content || "").toLowerCase();
+
+  const criticalTokens = [
+    "private key",
+    "customer pii",
+    "source code",
+    "credentials",
+    "password",
+    "database",
+    "top secret"
+  ];
+  const behaviorPattern = /bypass|disable monitoring|exfiltrat|unauthorized|steal|dump|external account|outside company/i;
+  const criticalHits = criticalTokens.filter((token) => text.includes(token)).length;
+  const behaviorHit = behaviorPattern.test(text);
+
+  if (normalizedLevel === "HIGH" || score >= 0.74) {
+    return { blocked: true, reason: "high_risk_score" };
+  }
+  if (normalizedLevel === "MEDIUM" && keywords.length >= 4 && (sentences.length >= 1 || behaviorHit)) {
+    return { blocked: true, reason: "medium_with_dense_signals" };
+  }
+  if (criticalHits >= 3 && (behaviorHit || keywords.length >= 5)) {
+    return { blocked: true, reason: "critical_content_pattern" };
+  }
+
+  return { blocked: false, reason: "allow" };
 }
 
 function serializeRequest(request) {
@@ -142,7 +231,7 @@ async function listDocuments(req, res) {
 async function createDocument(req, res) {
   await ensureDefaultDocuments();
 
-  const { name = "", department = "", sensitivityLevel = "Internal", content = "", tags = "" } = req.body || {};
+  const { name = "", department = "", sensitivityLevel = "Internal", content = "" } = req.body || {};
   let parsedContent = String(content || "");
   if (req.file) {
     try {
@@ -164,15 +253,27 @@ async function createDocument(req, res) {
   const allowedSensitivity = ["Public", "Internal", "Confidential", "Top Secret"];
   const normalizedSensitivity = allowedSensitivity.includes(sensitivityLevel) ? sensitivityLevel : "Internal";
   const normalizedDepartment = getRoleValidatedDepartment(req.user, department);
-  const parsedTags = String(tags || "")
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
 
   const mlResult = await detectMaliciousDocument(parsedContent.trim(), documentName);
   const riskScore = Number(mlResult.risk_score || 0);
   const riskLevel = String(mlResult.risk_level || "LOW").toUpperCase();
-  const isMalicious = riskLevel === "HIGH" || riskScore >= 0.75;
+  const suspiciousKeywords = mlResult.suspicious_keywords || [];
+  const suspiciousSentences = mlResult.suspicious_sentences || [];
+  const threatEvaluation = evaluateDocumentThreat({
+    riskLevel,
+    riskScore,
+    suspiciousKeywords,
+    suspiciousSentences,
+    content: parsedContent
+  });
+  const autoTags = inferDocumentTags({
+    documentName,
+    content: parsedContent,
+    department: normalizedDepartment,
+    sensitivityLevel: normalizedSensitivity,
+    mlResult,
+    riskScore
+  });
 
   const detection = await DetectionResult.create({
     type: "Document",
@@ -181,12 +282,15 @@ async function createDocument(req, res) {
     riskScore,
     details: {
       ...mlResult,
-      source: "employee_document_add_precheck"
+      source: "employee_document_add_precheck",
+      autoTags,
+      blockReason: threatEvaluation.reason
     },
     createdBy: req.user.employeeID
   });
 
-  if (isMalicious) {
+  if (threatEvaluation.blocked) {
+    const warningSeverity = riskScore >= 0.85 ? "high" : "warning";
     await UserActivity.create({
       employeeID: req.user.employeeID,
       actionType: "upload",
@@ -204,26 +308,31 @@ async function createDocument(req, res) {
 
     await createAlert({
       type: "Malicious Document",
-      severity: riskScore >= 0.85 ? "high" : "warning",
+      severity: warningSeverity,
       employeeID: req.user.employeeID,
       riskScore: Number(riskScore.toFixed(2)),
       message: `Blocked document add for ${documentName}. Malicious content detected during pre-scan.`,
       metadata: {
         source: "employee_document_add_precheck",
-        suspiciousKeywords: mlResult.suspicious_keywords || [],
-        suspiciousSentences: mlResult.suspicious_sentences || []
+        suspiciousKeywords,
+        suspiciousSentences,
+        blockReason: threatEvaluation.reason
       }
     });
 
     return res.status(403).json({
       message: "Document blocked. Malicious content detected during pre-scan.",
+      warning: true,
+      severity: warningSeverity,
       scan: {
         id: detection._id,
         fileName: documentName,
         riskLevel,
         riskScore: Number(riskScore.toFixed(2)),
-        suspiciousKeywords: mlResult.suspicious_keywords || [],
-        suspiciousSentences: mlResult.suspicious_sentences || []
+        suspiciousKeywords,
+        suspiciousSentences,
+        blockReason: threatEvaluation.reason,
+        autoTags
       }
     });
   }
@@ -233,7 +342,7 @@ async function createDocument(req, res) {
     department: normalizedDepartment || "General",
     sensitivityLevel: normalizedSensitivity,
     content: parsedContent.trim(),
-    tags: parsedTags,
+    tags: autoTags,
     createdBy: req.user.employeeID
   });
 
@@ -262,6 +371,7 @@ async function createDocument(req, res) {
       name: document.name,
       department: document.department,
       sensitivityLevel: document.sensitivityLevel,
+      tags: document.tags || [],
       contentPreview: summarizeContent(document.content)
     },
     scan: {
@@ -269,8 +379,9 @@ async function createDocument(req, res) {
       fileName: documentName,
       riskLevel,
       riskScore: Number(riskScore.toFixed(2)),
-      suspiciousKeywords: mlResult.suspicious_keywords || [],
-      suspiciousSentences: mlResult.suspicious_sentences || []
+      suspiciousKeywords,
+      suspiciousSentences,
+      autoTags
     }
   });
 }

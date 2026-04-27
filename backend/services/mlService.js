@@ -216,21 +216,54 @@ function documentFallback(payload = {}) {
     "leak",
     "exfiltrate",
     "private key",
-    "bypass"
+    "bypass",
+    "customer pii",
+    "source code",
+    "unauthorized",
+    "disable monitoring",
+    "external account",
+    "outside company",
+    "steal",
+    "dump",
+    "export"
+  ];
+  const criticalKeywordBank = [
+    "private key",
+    "customer pii",
+    "source code",
+    "database",
+    "credentials",
+    "password",
+    "top secret"
+  ];
+  const behaviorPatterns = [
+    /bypass/,
+    /disable monitoring/,
+    /exfiltrat/,
+    /unauthorized/,
+    /steal|dump|export/,
+    /external account|outside company|personal email/
   ];
 
   const suspiciousKeywords = collectMatchedKeywords(content, keywordBank);
+  const criticalKeywordHits = collectMatchedKeywords(content, criticalKeywordBank).length;
   const suspiciousSentences = splitSentences(text).filter((sentence) => {
     const sentenceText = normalizeText(sentence);
     return keywordBank.some((token) => sentenceText.includes(token));
   });
+  const behaviorHitCount = behaviorPatterns.filter((pattern) => pattern.test(content)).length;
+  const benignContext = /training|awareness|internal education|policy guidance|simulated|example only/.test(content);
 
-  const keywordScore = Math.min(suspiciousKeywords.length * 0.11, 0.6);
-  const phraseBoost =
-    /download|dump|steal|bypass|disable monitoring|exfiltrat|unauthorized/.test(content) ? 0.16 : 0.04;
+  const keywordScore = Math.min(suspiciousKeywords.length * 0.07, 0.42);
+  const criticalScore = Math.min(criticalKeywordHits * 0.1, 0.3);
+  const sentenceScore = Math.min(suspiciousSentences.length * 0.03, 0.12);
+  const phraseBoost = behaviorHitCount >= 2 ? 0.24 : behaviorHitCount === 1 ? 0.14 : 0.03;
   const fileBoost = /\.(docx|pdf|txt)$/i.test(fileName) ? 0.02 : 0;
+  const benignPenalty = benignContext && criticalKeywordHits <= 1 && behaviorHitCount === 0 ? 0.12 : 0;
 
-  const score = Number(clamp(0.08 + keywordScore + phraseBoost + fileBoost).toFixed(2));
+  const score = Number(
+    clamp(0.05 + keywordScore + criticalScore + sentenceScore + phraseBoost + fileBoost - benignPenalty).toFixed(2)
+  );
 
   return {
     risk_level: scoreToRiskLevel(score),
